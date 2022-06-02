@@ -851,12 +851,12 @@ def ConvertVectorToGPU : Pass<"convert-vector-to-gpu"> {
                 "dialect";
   let constructor = "mlir::createConvertVectorToGPUPass()";
   let dependentDialects = [
-    "memref::MemRefDialect", "gpu::GPUDialect", "AffineDialect", 
+    "memref::MemRefDialect", "gpu::GPUDialect", "AffineDialect",
     "vector::VectorDialect", "nvgpu::NVGPUDialect"
   ];
 
   let options = [
-    Option<"useNvGpu", "use-nvgpu", "bool", /*default=*/"false", 
+    Option<"useNvGpu", "use-nvgpu", "bool", /*default=*/"false",
       "convert to NvGPU ops instead of GPU dialect ops">
   ];
 }
@@ -953,6 +953,21 @@ def ConvertVectorToSPIRV : Pass<"convert-vector-to-spirv", "ModuleOp"> {
   let summary = "Convert Vector dialect to SPIR-V dialect";
   let constructor = "mlir::createConvertVectorToSPIRVPass()";
   let dependentDialects = ["spirv::SPIRVDialect"];
+}
+
+//===----------------------------------------------------------------------===//
+// LinalgToExternal
+//===----------------------------------------------------------------------===//
+
+def ConvertLinalgToExternal : Pass<"test-linalg-to-external", "ModuleOp"> {
+  let summary = "Convert Linalg Matmul into external function call";
+  let constructor = "mlir::createConvertLinalgToExternalPass()";
+  let dependentDialects = [
+    "AffineDialect",
+    "memref::MemRefDialect",
+    "scf::SCFDialect",
+    "LLVM::LLVMDialect",
+  ];
 }
 
 #endif // MLIR_CONVERSION_PASSES
