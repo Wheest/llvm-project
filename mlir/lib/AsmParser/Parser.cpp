@@ -1183,7 +1183,10 @@ ParseResult OperationParser::parseOperation() {
     return codeCompleteStringDialectOrOperationName(nameTok.getStringValue());
   else if (nameTok.isCodeCompletion())
     return codeCompleteDialectOrElidedOpName(loc);
-  else
+  else if (nameTok.is(Token::line_comment)) {
+    // Empty case, no action taken
+    op = parseGenericOperation();
+  } else
     return emitWrongTokenError("expected operation name in quotes");
 
   // If parsing of the basic operation failed, then this whole thing fails.

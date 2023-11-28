@@ -25,6 +25,7 @@ public:
 #define TOK_LITERAL(NAME) NAME,
 #define TOK_PUNCTUATION(NAME, SPELLING) NAME,
 #define TOK_KEYWORD(SPELLING) kw_##SPELLING,
+#define TOK_COMMENT(NAME) NAME,
 #include "TokenKinds.def"
   };
 
