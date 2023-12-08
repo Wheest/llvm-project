@@ -1,0 +1,6 @@
+# set(LLVM_TARGET_DEFINITIONS FmtOps.td)
+# mlir_tablegen(FmtOps.h.inc -gen-op-decls -name Format)
+# mlir_tablegen(FmtOps.cpp.inc -gen-op-defs)
+# add_public_tablegen_target(MLIRFormatOpsIncGen)
+add_mlir_dialect(FmtOps mlirformat)
+add_mlir_doc(FmtOps FmtOps Dialects/ -gen-dialect-doc)
