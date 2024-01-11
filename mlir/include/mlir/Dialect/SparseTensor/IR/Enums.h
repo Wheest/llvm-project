@@ -323,7 +323,7 @@ buildLevelType(LevelFormat lf, bool ordered, bool unique) {
 }
 
 //
-// Ensure the above methods work as indended.
+// Ensure the above methods work as intended.
 //
 
 static_assert(

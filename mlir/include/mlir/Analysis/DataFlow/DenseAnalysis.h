@@ -283,7 +283,7 @@ protected:
 
 /// Base class for dense backward dataflow analyses. Such analyses attach a
 /// lattice between the execution of operations and implement a transfer
-/// function from the lattice after the operation ot the lattice before it, thus
+/// function from the lattice after the operation on the lattice before it, thus
 /// propagating backward.
 ///
 /// In this implementation, a lattice attached to an operation represents the
@@ -362,7 +362,7 @@ protected:
   /// Propagate the dense lattice backwards along the call control flow edge,
   /// which can be either entering or exiting the callee. Default implementation
   /// just meets the states, meaning that operations implementing
-  /// `CallOpInterface` don't have any effect on hte lattice that isn't already
+  /// `CallOpInterface` don't have any effect on the lattice that isn't already
   /// expressed by the interface itself.
   virtual void visitCallControlFlowTransfer(CallOpInterface call,
                                             CallControlFlowAction action,
@@ -406,7 +406,7 @@ private:
 
 /// A dense backward dataflow analysis propagating lattices after and before the
 /// execution of every operation across the IR by implementing transfer
-/// functions for opreations.
+/// functions for operations.
 ///
 /// `LatticeT` is expected to be a subclass of `AbstractDenseLattice`.
 template <typename LatticeT>

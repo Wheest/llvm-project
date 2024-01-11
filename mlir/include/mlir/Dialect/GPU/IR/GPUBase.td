@@ -52,14 +52,14 @@ def GPU_Dialect : Dialect {
     /// Returns the numeric value used to identify the private memory address
     /// space.
     static AddressSpace getPrivateAddressSpace() { return AddressSpace::Private; }
-    
-    /// Return true if the given MemRefType has an address space that matches 
+
+    /// Return true if the given MemRefType has an address space that matches
     /// with the gpu::AddressSpaceAttr attribute with value 'workgroup`.
     static bool hasWorkgroupMemoryAddressSpace(MemRefType type);
 
-    /// Return true if the given Attribute is an gpu::AddressSpaceAttr 
+    /// Return true if the given Attribute is an gpu::AddressSpaceAttr
     /// attribute with value 'workgroup`.
-    static bool isWorkgroupMemoryAddressSpace(Attribute memorySpace);  
+    static bool isWorkgroupMemoryAddressSpace(Attribute memorySpace);
   }];
 
   let dependentDialects = ["arith::ArithDialect"];
@@ -102,7 +102,7 @@ def GPU_AsyncToken : DialectType<
   GPU_Dialect, CPred<"::llvm::isa<::mlir::gpu::AsyncTokenType>($_self)">, "async token type">,
              BuildableType<"mlir::gpu::AsyncTokenType::get($_builder.getContext())">;
 
-// Predicat to check if type is gpu::MMAMatrixType.
+// Predicate to check if type is gpu::MMAMatrixType.
 def IsMMAMatrixTypePred : CPred<"::llvm::isa<::mlir::gpu::MMAMatrixType>($_self)">;
 
 def GPU_MMAMatrix : DialectType<
@@ -139,7 +139,7 @@ def GPU_AsyncOpInterface : OpInterface<"AsyncOpInterface"> {
     GPU operations implementing this interface take a list of dependencies
     as `gpu.async.token` arguments and optionally return a `gpu.async.token`.
 
-    The op doesn't start executing until all depent ops producing the async
+    The op doesn't start executing until all dependent ops producing the async
     dependency tokens have finished executing.
 
     If the op returns a token, the op merely schedules the execution on the
