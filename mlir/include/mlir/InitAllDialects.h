@@ -47,6 +47,7 @@
 #include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Linalg/Transforms/SubsetInsertionOpInterfaceImpl.h"
 #include "mlir/Dialect/Linalg/Transforms/TilingInterfaceImpl.h"
+#include "mlir/Dialect/MLIRFormat/MLIRFormat.h"
 #include "mlir/Dialect/MLProgram/IR/MLProgram.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -133,6 +134,7 @@ inline void registerAllDialects(DialectRegistry &registry) {
                   shape::ShapeDialect,
                   sparse_tensor::SparseTensorDialect,
                   spirv::SPIRVDialect,
+                  mlirformat::MLIRFormatDialect,
                   tensor::TensorDialect,
                   tosa::TosaDialect,
                   transform::TransformDialect,

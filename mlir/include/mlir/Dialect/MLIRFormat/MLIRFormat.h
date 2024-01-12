@@ -1,16 +1,7 @@
-//===- Format.h - mlir-format dialect -----------------------------*- C++-*-==//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-
-#ifndef MLIR_DIALECT_FORMAT_IR_FORMAT_H_
-#define MLIR_DIALECT_FORMAT_IR_FORMAT_H_
+#ifndef MLIR_DIALECT_FORMAT_H_
+#define MLIR_DIALECT_FORMAT_H_
 
 #include "mlir/Bytecode/BytecodeOpInterface.h"
-#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
@@ -20,16 +11,16 @@
 #include "mlir/Interfaces/VectorInterfaces.h"
 
 //===----------------------------------------------------------------------===//
-// Math Dialect
+// mlir-format Dialect
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Dialect/Format/FmtOpsDialect.h.inc"
+#include "mlir/Dialect/MLIRFormat/MLIRFormatOpsDialect.h.inc"
 
 //===----------------------------------------------------------------------===//
 // mlir-format Dialect Operations
 //===----------------------------------------------------------------------===//
 
 #define GET_OP_CLASSES
-#include "mlir/Dialect/Format/FmtOps.h.inc"
+#include "mlir/Dialect/MLIRFormat/MLIRFormatOps.h.inc"
 
-#endif // MLIR_DIALECT_FORMAT_IR_FORMAT_H_
+#endif // MLIR_DIALECT_FORMAT_H_

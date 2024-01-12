@@ -12,7 +12,7 @@
 #ifndef FORMAT_OPS
 #define FORMAT_OPS
 
-include "mlir/Dialect/Format/FmtBase.td"
+include "mlir/Dialect/MLIRFormat/MLIRFormatBase.td"
 include "mlir/Pass/PassBase.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
@@ -24,8 +24,8 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 //   * The parent dialect of the operation.
 //   * The mnemonic for the operation, or the name without the dialect prefix.
 //   * A list of traits for the operation.
-class Format_Op<string mnemonic, list<Trait> traits = []> :
-    Op<Format_Dialect, mnemonic, traits>;
+// class Format_Op<string mnemonic, list<Trait> traits = []> :
+//     Op<MLIRFormat_Dialect, mnemonic, traits>;
 
 //===----------------------------------------------------------------------===//
 // mlir-format Operations
@@ -35,16 +35,16 @@ class Format_Op<string mnemonic, list<Trait> traits = []> :
 // LineCommentOp
 //===----------------------------------------------------------------------===//
 
-def LineCommentOp : Format_Op<"line_comment"> {
-  let summary = "line comment";
-  let description = [{
-    The "line_comment" builtin operation just stores a line comment, and produces
-    no results.
-  }];
+// def LineCommentOp : Format_Op<"line_comment"> {
+//   let summary = "line comment";
+//   let description = [{
+//     The "line_comment" builtin operation just stores a line comment, and produces
+//     no results.
+//   }];
 
-  // The operation takes an input tensor to print.
-  // let arguments = (ins FlatSymbolRefAttr:$comment);
+//   // The operation takes an input tensor to print.
+//   // let arguments = (ins FlatSymbolRefAttr:$comment);
 
-  let assemblyFormat = "`hey_we_have_out_comment` attr-dict";
-}
+//   let assemblyFormat = "`hey_we_have_out_comment` attr-dict";
+// }
 #endif // FORMAT_OPS
