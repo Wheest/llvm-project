@@ -11,3 +11,6 @@ void mlir::foo::FooDialect::initialize() {
 #include "mlir/Dialect/Foo/FooOps.cpp.inc"
       >();
 }
+
+#define GET_OP_CLASSES
+#include "mlir/Dialect/Foo/FooOps.cpp.inc"
