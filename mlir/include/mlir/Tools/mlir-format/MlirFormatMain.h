@@ -36,7 +36,8 @@ namespace mlir {
 LogicalResult MlirFormatMain(llvm::raw_ostream &outputStream,
                              std::unique_ptr<llvm::MemoryBuffer> buffer,
                              DialectRegistry &registry,
-                             const MlirOptMainConfig &config);
+                             const MlirOptMainConfig &config,
+                             bool removeModule);
 
 /// Implementation for tools like `mlir-format`.
 /// - toolName is used for the header displayed by `--help`.

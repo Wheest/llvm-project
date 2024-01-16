@@ -11,49 +11,22 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Tools/mlir-format/MlirFormatMain.h"
-#include "mlir/Bytecode/BytecodeWriter.h"
-#include "mlir/Debug/CLOptionsSetup.h"
-#include "mlir/Debug/Counter.h"
-#include "mlir/Debug/DebuggerExecutionContextHook.h"
-#include "mlir/Debug/ExecutionContext.h"
-#include "mlir/Debug/Observers/ActionLogging.h"
-#include "mlir/Dialect/IRDL/IR/IRDL.h"
-#include "mlir/Dialect/IRDL/IRDLLoading.h"
-#include "mlir/IR/AsmState.h"
-#include "mlir/IR/Attributes.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/Diagnostics.h"
-#include "mlir/IR/Dialect.h"
-#include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
-#include "mlir/Support/Timing.h"
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Tools/ParseUtilities.h"
-#include "mlir/Tools/Plugins/DialectPlugin.h"
-#include "mlir/Tools/Plugins/PassPlugin.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "mlir/Tools/mlir-opt/MlirOptUtil.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Process.h"
-#include "llvm/Support/Regex.h"
 #include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/StringSaver.h"
 #include "llvm/Support/ThreadPool.h"
 #include "llvm/Support/ToolOutputFile.h"
-
-#include <fstream>
-#include <llvm/Support/FileSystem.h>
-#include <llvm/Support/raw_ostream.h>
-#include <regex>
-#include <string>
 
 using namespace mlir;
 using namespace llvm;
@@ -115,8 +88,9 @@ std::string process_comment(std::string line, const MlirOptMainConfig &config,
   return comment_str;
 }
 
-void mlir_format_process(std::string &fileStr, const MlirOptMainConfig &config,
-                         MLIRContext *context) {
+void mlir_format_post_process(std::string &fileStr,
+                              const MlirOptMainConfig &config,
+                              MLIRContext *context, bool removeModule) {
   // performs post-processing on the printed MLIR IR
 
   // replace: `"mlirformat.comment"() {str = "foo"} : () -> ()`
@@ -137,8 +111,6 @@ void mlir_format_process(std::string &fileStr, const MlirOptMainConfig &config,
   llvm::outs() << "searched for line comments!\n";
 
   // Remove the inserted module wrapping
-  bool removeModule = true; // TODO make this a condition check if the original
-                            // file is wrapped by a module
   if (removeModule && !lines.empty() && lines.front() == "module {") {
     lines.erase(lines.begin()); // Remove first element
     if (!lines.empty()) {
@@ -174,7 +146,29 @@ void mlir_format_process(std::string &fileStr, const MlirOptMainConfig &config,
   for (const auto &modLine : lines) {
     outputFile << modLine << "\n";
   }
-  llvm::outs() << "ran find_comments\n";
+}
+
+bool checkModulePrefix(const std::unique_ptr<llvm::MemoryBuffer> &buffer) {
+  if (!buffer) {
+    return false;
+  }
+
+  llvm::StringRef bufferContents = buffer->getBuffer();
+
+  // Skip initial whitespace
+  size_t nonWhitespacePos = bufferContents.find_first_not_of(" \t\n\v\f\r");
+  if (nonWhitespacePos == llvm::StringRef::npos) {
+    return false; // Only whitespace found, no non-whitespace text
+  }
+
+  // Check if the first non-whitespace text is "module"
+  llvm::StringRef firstWord =
+      bufferContents.substr(nonWhitespacePos).split(' ').first;
+  if (firstWord.startswith("module")) {
+    return false;
+  }
+
+  return true;
 }
 
 /// Perform the actions on the input file indicated by the command line flags
@@ -183,11 +177,9 @@ void mlir_format_process(std::string &fileStr, const MlirOptMainConfig &config,
 /// This typically parses the main source file, runs zero or more optimization
 /// passes, then prints the output.
 ///
-static LogicalResult
-performActions(raw_ostream &os,
-               const std::shared_ptr<llvm::SourceMgr> &sourceMgr,
-               MLIRContext *context, const MlirOptMainConfig &config) {
-  llvm::outs() << "Mlir-opt-main performing actions\n";
+static LogicalResult performActions(
+    raw_ostream &os, const std::shared_ptr<llvm::SourceMgr> &sourceMgr,
+    MLIRContext *context, const MlirOptMainConfig &config, bool removeModule) {
   DefaultTimingManager tm;
   applyDefaultTimingManagerCLOptions(tm);
   TimingScope timing = tm.getRootScope();
@@ -215,7 +207,7 @@ performActions(raw_ostream &os,
   parserTiming.stop();
   if (!op)
     return failure();
-  llvm::outs() << "Mlir-opt-main parser complete?\n";
+
   // Perform round-trip verification if requested
   if (config.shouldVerifyRoundtrip() &&
       failed(doVerifyRoundTrip(op.get(), config)))
@@ -239,7 +231,6 @@ performActions(raw_ostream &os,
     return failure();
 
   // Print the output.
-  llvm::outs() << "Mlir-opt-main printing output\n";
   TimingScope outputTiming = timing.nest("Output");
   if (config.shouldEmitBytecode()) {
     BytecodeWriterConfig writerConfig(fallbackResourceMap);
@@ -255,30 +246,26 @@ performActions(raw_ostream &os,
            << "bytecode version while not emitting bytecode";
   AsmState asmState(op.get(), OpPrintingFlags(), /*locationMap=*/nullptr,
                     &fallbackResourceMap);
-  llvm::outs() << "Mlir-opt-main about to print asmstate?\n";
   op.get()->print(os, asmState);
-
-  llvm::outs() << "Mlir-opt-main printed asmstate?\n";
   os << '\n';
-  llvm::outs() << "Mlir-opt-main actions performed\n";
 
   // Create a raw_string_ostream that writes the IR to a std::string.
   std::string irStr;
   llvm::raw_string_ostream rso(irStr);
   op.get()->print(rso, asmState);
   rso.flush();
-  mlir_format_process(irStr, config, context);
+
+  mlir_format_post_process(irStr, config, context, removeModule);
 
   return success();
 }
 
 /// Parses the memory buffer.  If successfully, run a series of passes against
 /// it and print the result.
-static LogicalResult processBuffer(raw_ostream &os,
-                                   std::unique_ptr<MemoryBuffer> ownedBuffer,
-                                   const MlirOptMainConfig &config,
-                                   DialectRegistry &registry,
-                                   llvm::ThreadPool *threadPool) {
+static LogicalResult
+processBuffer(raw_ostream &os, std::unique_ptr<MemoryBuffer> ownedBuffer,
+              const MlirOptMainConfig &config, DialectRegistry &registry,
+              llvm::ThreadPool *threadPool, bool removeModule) {
   // Tell sourceMgr about this buffer, which is what the parser will pick up.
   auto sourceMgr = std::make_shared<SourceMgr>();
   sourceMgr->AddNewSourceBuffer(std::move(ownedBuffer), SMLoc());
@@ -310,7 +297,7 @@ static LogicalResult processBuffer(raw_ostream &os,
   // otherwise just perform the actions without worrying about it.
   if (!config.shouldVerifyDiagnostics()) {
     SourceMgrDiagnosticHandler sourceMgrHandler(*sourceMgr, &context);
-    return performActions(os, sourceMgr, &context, config);
+    return performActions(os, sourceMgr, &context, config, removeModule);
   }
 
   SourceMgrDiagnosticVerifierHandler sourceMgrHandler(*sourceMgr, &context);
@@ -318,7 +305,7 @@ static LogicalResult processBuffer(raw_ostream &os,
   // Do any processing requested by command line flags.  We don't care whether
   // these actions succeed or fail, we only care what diagnostics they produce
   // and whether they match our expectations.
-  (void)performActions(os, sourceMgr, &context, config);
+  (void)performActions(os, sourceMgr, &context, config, removeModule);
 
   // Verify the diagnostic handler to make sure that each of the diagnostics
   // matched.
@@ -328,7 +315,8 @@ static LogicalResult processBuffer(raw_ostream &os,
 LogicalResult mlir::MlirFormatMain(llvm::raw_ostream &outputStream,
                                    std::unique_ptr<llvm::MemoryBuffer> buffer,
                                    DialectRegistry &registry,
-                                   const MlirOptMainConfig &config) {
+                                   const MlirOptMainConfig &config,
+                                   bool removeModule) {
   if (config.shouldShowDialects()) {
     llvm::outs() << "Available Dialects: ";
     interleave(registry.getDialectNames(), llvm::outs(), ",");
@@ -352,7 +340,7 @@ LogicalResult mlir::MlirFormatMain(llvm::raw_ostream &outputStream,
   auto chunkFn = [&](std::unique_ptr<MemoryBuffer> chunkBuffer,
                      raw_ostream &os) {
     return processBuffer(os, std::move(chunkBuffer), config, registry,
-                         threadPool);
+                         threadPool, removeModule);
   };
   return splitAndProcessBuffer(std::move(buffer), chunkFn, outputStream,
                                config.shouldSplitInputFile(),
@@ -384,12 +372,16 @@ LogicalResult mlir::MlirFormatMain(int argc, char **argv,
     return failure();
   }
 
+  // Check if the input file is wrapped with a module
+  bool removeModule = checkModulePrefix(file);
+
   auto output = openOutputFile(outputFilename, &errorMessage);
   if (!output) {
     llvm::errs() << errorMessage << "\n";
     return failure();
   }
-  if (failed(MlirFormatMain(output->os(), std::move(file), registry, config)))
+  if (failed(MlirFormatMain(output->os(), std::move(file), registry, config,
+                            removeModule)))
     return failure();
 
   // Keep the output file if the invocation of MlirFormatMain was successful.
