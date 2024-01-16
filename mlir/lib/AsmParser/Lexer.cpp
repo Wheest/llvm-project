@@ -154,9 +154,13 @@ Token Lexer::lexToken() {
 
     case '/':
       if (*curPtr == '/') {
-        return lexComment(tokStart);
-        skipComment();
-        continue;
+        if (!context->isRetainCommentsEnabled()) {
+          skipComment();
+          continue;
+        } else {
+          // retain comments for purposes e.g., mlir-format
+          return lexComment(tokStart);
+        }
       }
       return emitError(tokStart, "unexpected character");
 

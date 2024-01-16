@@ -293,6 +293,11 @@ static LogicalResult processBuffer(raw_ostream &os,
   if (!irdlFile.empty() && failed(loadIRDLDialects(irdlFile, context)))
     return failure();
 
+  // Enable comment retention
+  context.enableRetainComments();
+  if (!context.isRetainCommentsEnabled())
+    return failure();
+
   // Parse the input file.
   context.allowUnregisteredDialects(config.shouldAllowUnregisteredDialects());
   if (config.shouldVerifyDiagnostics())
@@ -315,7 +320,6 @@ static LogicalResult processBuffer(raw_ostream &os,
   // and whether they match our expectations.
   (void)performActions(os, sourceMgr, &context, config);
 
-  llvm::outs() << "Mlir-opt-main finished\n";
   // Verify the diagnostic handler to make sure that each of the diagnostics
   // matched.
   return sourceMgrHandler.verify();
