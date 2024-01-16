@@ -59,7 +59,7 @@ set(LIBS
   MLIRAnalysis
   MLIRCastInterfaces
   MLIRDialect
-  MLIROptLib
+  MLIRFormatLib
   MLIRParser
   MLIRPass
   MLIRTransforms

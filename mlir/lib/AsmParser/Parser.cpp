@@ -1407,16 +1407,50 @@ Operation *OperationParser::parseComment() {
   StringRef bytes = tok.getSpelling();
   std::string comment;
   comment.reserve(bytes.size());
-  for (unsigned i = 0, e = bytes.size(); i != e;) {
+  for (unsigned i = 2, e = bytes.size(); i != e;) {
+    // skip first two `//` characters
     auto c = bytes[i++];
     comment.push_back(c);
+  }
+  if (!comment.empty() && comment.back() == '\n') {
+    comment.pop_back();
   }
 
   consumeToken(Token::line_comment);
 
-  OperationState result(srcLocation, comment);
-  CleanupOpStateRegions guard{result};
-  Operation *op = opBuilder.create(result);
+  OperationState opState(srcLocation, comment);
+  CleanupOpStateRegions guard{opState};
+
+  StringRef dialectName = "mlirformat";
+  auto *dialect = getContext()->getOrLoadDialect(dialectName);
+
+  if (!getContext()->getLoadedDialect(dialectName) &&
+      !getContext()->getOrLoadDialect(dialectName)) {
+    if (!getContext()->allowsUnregisteredDialects()) {
+      // Emit an error if the dialect couldn't be loaded (i.e., it was not
+      // registered) and unregistered dialects aren't allowed.
+      emitError("operation being parsed with an unregistered dialect. If "
+                "this is intended, please use -allow-unregistered-dialect "
+                "with the MLIR tool used");
+      return nullptr;
+    }
+  } else {
+    // Reload the OperationName now that the dialect is loaded.
+    StringRef op_name = "mlirformat.line_comment";
+    opState.name = OperationName(op_name, getContext());
+  }
+
+  // If we are populating the parser state, start a new operation definition.
+  if (state.asmState)
+    state.asmState->startOperationDefinition(opState.name);
+
+  opState.addAttribute("str", StringAttr::get(getContext(), comment));
+
+  // Create the operation and try to parse a location for it.
+  Operation *op = opBuilder.create(opState);
+  if (parseTrailingLocationSpecifier(op))
+    return nullptr;
+
   return op;
 }
 

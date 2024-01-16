@@ -24,8 +24,8 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 //   * The parent dialect of the operation.
 //   * The mnemonic for the operation, or the name without the dialect prefix.
 //   * A list of traits for the operation.
-// class Format_Op<string mnemonic, list<Trait> traits = []> :
-//     Op<MLIRFormat_Dialect, mnemonic, traits>;
+class MLIRFormat_Op<string mnemonic, list<Trait> traits = []> :
+    Op<MLIRFormat_Dialect, mnemonic, traits>;
 
 //===----------------------------------------------------------------------===//
 // mlir-format Operations
@@ -35,16 +35,11 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 // LineCommentOp
 //===----------------------------------------------------------------------===//
 
-// def LineCommentOp : Format_Op<"line_comment"> {
-//   let summary = "line comment";
-//   let description = [{
-//     The "line_comment" builtin operation just stores a line comment, and produces
-//     no results.
-//   }];
-
-//   // The operation takes an input tensor to print.
-//   // let arguments = (ins FlatSymbolRefAttr:$comment);
-
-//   let assemblyFormat = "`hey_we_have_out_comment` attr-dict";
-// }
+def LineCommentOp : MLIRFormat_Op<"line_comment"> {
+  let summary = "line comment operation";
+  let description = [{
+    The "line_comment" builtin operation just stores a line comment, and produces
+    no results.
+  }];
+}
 #endif // FORMAT_OPS

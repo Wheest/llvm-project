@@ -21,7 +21,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Target/LLVMIR/Dialect/All.h"
-#include "mlir/Tools/mlir-opt/MlirOptMain.h"
+#include "mlir/Tools/mlir-format/MlirFormatMain.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/SourceMgr.h"
@@ -282,6 +282,6 @@ int main(int argc, char **argv) {
   ::test::registerTestTransformDialectExtension(registry);
   ::test::registerTestDynDialect(registry);
 #endif
-  return mlir::asMainReturnCode(mlir::MlirOptMain(
+  return mlir::asMainReturnCode(mlir::MlirFormatMain(
       argc, argv, "MLIR modular optimizer driver\n", registry));
 }
