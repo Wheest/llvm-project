@@ -8,6 +8,7 @@ add_mlir_library(MLIRFormatLib
   MLIRBytecodeWriter
   MLIRDebug
   MLIRObservers
+  MLIROptLib
   MLIRPass
   MLIRParser
   MLIRPluginsLib
