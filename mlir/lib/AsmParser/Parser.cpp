@@ -1186,7 +1186,7 @@ ParseResult OperationParser::parseOperation() {
     return codeCompleteStringDialectOrOperationName(nameTok.getStringValue());
   else if (nameTok.isCodeCompletion())
     return codeCompleteDialectOrElidedOpName(loc);
-  else if (nameTok.is(Token::line_comment)) {
+  else if (nameTok.is(Token::comment)) {
     op = parseComment();
   } else
     return emitWrongTokenError("expected operation name in quotes");
@@ -1416,13 +1416,12 @@ Operation *OperationParser::parseComment() {
     comment.pop_back();
   }
 
-  consumeToken(Token::line_comment);
+  consumeToken(Token::comment);
 
   OperationState opState(srcLocation, comment);
   CleanupOpStateRegions guard{opState};
 
   StringRef dialectName = "mlirformat";
-  auto *dialect = getContext()->getOrLoadDialect(dialectName);
 
   if (!getContext()->getLoadedDialect(dialectName) &&
       !getContext()->getOrLoadDialect(dialectName)) {
@@ -1436,7 +1435,7 @@ Operation *OperationParser::parseComment() {
     }
   } else {
     // Reload the OperationName now that the dialect is loaded.
-    StringRef op_name = "mlirformat.line_comment";
+    StringRef op_name = "mlirformat.comment";
     opState.name = OperationName(op_name, getContext());
   }
 

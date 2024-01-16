@@ -130,9 +130,7 @@ TOK_KEYWORD(unit)
 TOK_KEYWORD(vector)
 
 // Comments
-// TOK_COMMENT(line_comment)  // // This is a line comment
-// TOK_COMMENT(block_comment) // /* This is a block comment */
-TOK_COMMENT(line_comment)
+TOK_COMMENT(comment)
 
 #undef TOK_MARKER
 #undef TOK_IDENTIFIER

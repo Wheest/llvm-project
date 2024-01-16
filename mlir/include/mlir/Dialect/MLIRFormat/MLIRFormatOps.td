@@ -32,13 +32,13 @@ class MLIRFormat_Op<string mnemonic, list<Trait> traits = []> :
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
-// LineCommentOp
+// CommentOp
 //===----------------------------------------------------------------------===//
 
-def LineCommentOp : MLIRFormat_Op<"line_comment"> {
-  let summary = "line comment operation";
+def CommentOp : MLIRFormat_Op<"comment"> {
+  let summary = "comment operation";
   let description = [{
-    The "line_comment" builtin operation just stores a line comment, and produces
+    The "comment" builtin operation just stores a comment, and produces
     no results.
   }];
 }

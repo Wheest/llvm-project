@@ -154,8 +154,8 @@ Token Lexer::lexToken() {
 
     case '/':
       if (*curPtr == '/') {
-        return lexLineComment(tokStart);
-        // skipComment();
+        return lexComment(tokStart);
+        skipComment();
         continue;
       }
       return emitError(tokStart, "unexpected character");
@@ -281,12 +281,12 @@ void Lexer::skipComment() {
   }
 }
 
-/// Lex a line comment, starting with '//'.
+/// Lex a comment, starting with '//'.
 /// The lexer will emit a TOK_COMMENT token.
 ///
-///   line-comment ::= '//' [^\n]* '\n'
+///   comment ::= '//' [^\n]* '\n'
 ///
-Token Lexer::lexLineComment(const char *tokStart) {
+Token Lexer::lexComment(const char *tokStart) {
   assert(*(curPtr - 1) == '/' && *curPtr == '/');
   curPtr++; // Move past the second '/'.
 
@@ -300,7 +300,7 @@ Token Lexer::lexLineComment(const char *tokStart) {
     curPtr++;
 
   // Form the comment token and return it.
-  return formToken(Token::line_comment, tokStart);
+  return formToken(Token::comment, tokStart);
 }
 
 /// Lex an ellipsis.

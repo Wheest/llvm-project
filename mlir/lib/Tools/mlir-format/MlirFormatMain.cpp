@@ -329,23 +329,13 @@ static LogicalResult doVerifyRoundTrip(Operation *op,
   return doVerifyRoundTrip(op, config, /*useBytecode=*/true);
 }
 
-std::string process_line_comment(std::string line,
-                                 const MlirFormatMainConfig &config,
-                                 MLIRContext *context) {
-  const std::string commentFilePath = "/tmp/line_comment.mlir";
+std::string process_comment(std::string line,
+                            const MlirFormatMainConfig &config,
+                            MLIRContext *context) {
   std::error_code EC;
-  llvm::raw_fd_ostream outFile(commentFilePath, EC, llvm::sys::fs::OF_None);
-  if (EC) {
-    llvm::errs() << "Error opening output file: " << commentFilePath << "\n";
-  }
-  outFile << line << "\n";
-  outFile.close();
-  std::string errorMessage;
-  auto src_buffer = openInputFile(commentFilePath, &errorMessage);
-  if (!src_buffer) {
-    llvm::errs() << errorMessage << "\n";
-    // return failure();
-  }
+  std::unique_ptr<llvm::MemoryBuffer> src_buffer =
+      llvm::MemoryBuffer::getMemBuffer(llvm::StringRef(line), "comment:" + line,
+                                       false);
 
   // Tell sourceMgr about this buffer, which is what the parser will pick
   // up.
@@ -399,27 +389,14 @@ std::string process_line_comment(std::string line,
   }
 }
 
-// void find_line_comments(const MlirFormatMainConfig &config,
-//                         MLIRContext *context) {
-
-// }
-
 void mlir_format_process(std::string &fileStr,
                          const MlirFormatMainConfig &config,
                          MLIRContext *context) {
   // performs post-processing on the printed MLIR IR
-  // replaces: `"mlirformat.line_comment"() {str = "foo"} : () -> ()`
+
+  // replace: `"mlirformat.comment"() {str = "foo"} : () -> ()`
   // with: `// foo`, keeping the indentation
-  // replaceLineCommentWithActualComment(fileStream);
-  // const std::string inputFilePath = "/tmp/output.mlir";
-
-  const std::string searchKeyword = "\"mlirformat.line_comment\"";
-
-  // std::ifstream inputFile(inputFilePath);
-  // if (!inputFile.is_open()) {
-  //   llvm::errs() << "Error opening input file: " << inputFilePath << "\n";
-  // }
-
+  const std::string searchKeyword = "\"mlirformat.comment\"";
   std::vector<std::string> lines; // modified IR strings
   std::istringstream iss(fileStr);
   std::string line;
@@ -428,21 +405,11 @@ void mlir_format_process(std::string &fileStr,
       // Extract the leading whitespace (indentation)
       std::string leadingWhitespace =
           line.substr(0, line.find_first_not_of("\t\v\f "));
-      line = leadingWhitespace + "//" +
-             process_line_comment(line, config, context);
+      line = leadingWhitespace + "//" + process_comment(line, config, context);
     }
     lines.push_back(line);
   }
   llvm::outs() << "searched for line comments!\n";
-
-  const std::string outputFilePath = "/tmp/output_mod.mlir";
-  std::error_code EC;
-  llvm::raw_fd_ostream outputFile(outputFilePath, EC, llvm::sys::fs::OF_Text);
-  if (EC) {
-    llvm::errs() << "Error opening file for writing: " << outputFilePath
-                 << "\n";
-    return;
-  }
 
   // Remove the inserted module wrapping
   bool removeModule = true; // TODO make this a condition check if the original
@@ -471,11 +438,18 @@ void mlir_format_process(std::string &fileStr,
   }
 
   // Write the modified lines back to the file
+  const std::string outputFilePath = "/tmp/output_mod.mlir";
+  std::error_code EC;
+  llvm::raw_fd_ostream outputFile(outputFilePath, EC, llvm::sys::fs::OF_Text);
+  if (EC) {
+    llvm::errs() << "Error opening file for writing: " << outputFilePath
+                 << "\n";
+    return;
+  }
   for (const auto &modLine : lines) {
     outputFile << modLine << "\n";
   }
-  // find_line_comments(fileStr, config, context);
-  llvm::outs() << "ran find_line_comments\n";
+  llvm::outs() << "ran find_comments\n";
 }
 
 /// Perform the actions on the input file indicated by the command line flags
