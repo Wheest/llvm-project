@@ -329,24 +329,6 @@ static LogicalResult doVerifyRoundTrip(Operation *op,
   return doVerifyRoundTrip(op, config, /*useBytecode=*/true);
 }
 
-// void replaceLineCommentWithActualComment(std::string &buffer) {
-//   // Regular expression to find the "mlirformat.line_comment" operation.
-//   // This regex includes capturing groups to preserve indentation.
-//     // Define a regex to match the pattern
-//     std::regex lineCommentRegex(R"((\s*)"mlirformat\.line_comment"\(\) \{str
-//     = "([^"]*)"\} : \(\) -> \(\))");
-
-//     // // Replace matches using a lambda function to keep the indentation
-//     // std::string replaced = std::regex_replace(code, re, [](const
-//     std::smatch& m) {
-//     //     return m[1].str() + "// " + m[2].str();  // m[1] is indentation,
-//     m[2] is the comment text
-//     // });
-
-//   // Perform the regex replacement.
-//   buffer = std::regex_replace(buffer, lineCommentRegex, "$1// $2\n");
-// }
-
 std::string process_line_comment(std::string line,
                                  const MlirFormatMainConfig &config,
                                  MLIRContext *context) {
@@ -417,20 +399,31 @@ std::string process_line_comment(std::string line,
   }
 }
 
-void find_line_comments(const MlirFormatMainConfig &config,
-                        MLIRContext *context) {
-  const std::string inputFilePath = "/tmp/output.mlir";
+// void find_line_comments(const MlirFormatMainConfig &config,
+//                         MLIRContext *context) {
+
+// }
+
+void mlir_format_process(std::string &fileStr,
+                         const MlirFormatMainConfig &config,
+                         MLIRContext *context) {
+  // performs post-processing on the printed MLIR IR
+  // replaces: `"mlirformat.line_comment"() {str = "foo"} : () -> ()`
+  // with: `// foo`, keeping the indentation
+  // replaceLineCommentWithActualComment(fileStream);
+  // const std::string inputFilePath = "/tmp/output.mlir";
 
   const std::string searchKeyword = "\"mlirformat.line_comment\"";
 
-  std::ifstream inputFile(inputFilePath);
-  if (!inputFile.is_open()) {
-    llvm::errs() << "Error opening input file: " << inputFilePath << "\n";
-  }
+  // std::ifstream inputFile(inputFilePath);
+  // if (!inputFile.is_open()) {
+  //   llvm::errs() << "Error opening input file: " << inputFilePath << "\n";
+  // }
 
-  std::vector<std::string> lines;
+  std::vector<std::string> lines; // modified IR strings
+  std::istringstream iss(fileStr);
   std::string line;
-  while (std::getline(inputFile, line)) {
+  while (std::getline(iss, line)) {
     if (line.find(searchKeyword) != std::string::npos) {
       // Extract the leading whitespace (indentation)
       std::string leadingWhitespace =
@@ -442,8 +435,6 @@ void find_line_comments(const MlirFormatMainConfig &config,
   }
   llvm::outs() << "searched for line comments!\n";
 
-  inputFile.close();
-
   const std::string outputFilePath = "/tmp/output_mod.mlir";
   std::error_code EC;
   llvm::raw_fd_ostream outputFile(outputFilePath, EC, llvm::sys::fs::OF_Text);
@@ -453,101 +444,40 @@ void find_line_comments(const MlirFormatMainConfig &config,
     return;
   }
 
+  // Remove the inserted module wrapping
+  bool removeModule = true; // TODO make this a condition check if the original
+                            // file is wrapped by a module
+  if (removeModule && !lines.empty() && lines.front() == "module {") {
+    lines.erase(lines.begin()); // Remove first element
+    if (!lines.empty()) {
+      lines.pop_back(); // Remove last element
+    }
+    // Remove one level of indentation introduced by the module wrapping
+    if (lines.size() > 1) {
+      const std::string &first_line = lines[0];
+      std::size_t indent_length = first_line.find_first_not_of(
+          " \t"); // Assume tabs or spaces for whitespace
+
+      if (indent_length != std::string::npos && indent_length > 0) {
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+          std::string &line = lines[i];
+          if (line.substr(0, indent_length).find_first_not_of(" \t") ==
+              std::string::npos) {
+            line.erase(0, indent_length);
+          }
+        }
+      }
+    }
+  }
+
   // Write the modified lines back to the file
   for (const auto &modLine : lines) {
     outputFile << modLine << "\n";
   }
-}
-
-void mlir_format_process(llvm::raw_fd_ostream &fileStream,
-                         const MlirFormatMainConfig &config,
-                         MLIRContext *context) {
-  // performs post-processing on the printed MLIR IR
-  // replaces: `"mlirformat.line_comment"() {str = "foo"} : () -> ()`
-  // with: `// foo`, keeping the indentation
-  // replaceLineCommentWithActualComment(fileStream);
-
-  // Disable multi-threading when parsing the input file. This removes the
-  // unnecessary/costly context synchronization when parsing.
-  //
-  fileStream.flush();
-  find_line_comments(config, context);
+  // find_line_comments(fileStr, config, context);
   llvm::outs() << "ran find_line_comments\n";
-  // context->disableMultithreading();
-
-  // std::string file_path =
-  //     "/home/pez/proj/compiler_stuff/standalone_format/single_comment.mlir";
-
-  // std::string errorMessage;
-  // auto src_buffer = openInputFile(file_path, &errorMessage);
-  // if (!src_buffer) {
-  //   llvm::errs() << errorMessage << "\n";
-  //   // return failure();
-  // }
-
-  // // Tell sourceMgr about this buffer, which is what the parser will pick
-  // // up.
-  // auto sourceMgr = std::make_shared<SourceMgr>();
-  // sourceMgr->AddNewSourceBuffer(std::move(src_buffer), SMLoc());
-
-  // PassReproducerOptions reproOptions;
-  // FallbackAsmResourceMap fallbackResourceMap;
-  // ParserConfig parseConfig(context, /*verifyAfterParse=*/true,
-  //                          &fallbackResourceMap);
-  // OwningOpRef<Operation *> op = parseSourceFileForTool(
-  //     sourceMgr, parseConfig, !config.shouldUseExplicitModule());
-
-  // llvm::outs() << "MLIR format process is running!\n";
-  // AsmState asmState(op.get(), OpPrintingFlags(), /*locationMap=*/nullptr,
-  //                   &fallbackResourceMap);
-
-  // std::error_code EC;
-  // llvm::raw_fd_ostream fileStream2("/tmp/output_post.mlir", EC,
-  //                                  llvm::sys::fs::OF_Text);
-
-  // if (EC) {
-  //   llvm::errs() << "Error: " << EC.message() << "\n";
-  //   // Handle error appropriately.
-  // }
-  // auto my_op = op.get();
-  // // my_op.bodyRegion();
-  // llvm::outs() << "My_op has this many regions: " << my_op->getNumRegions()
-  //              << "\n";
-  // // op.get()->print(fileStream, asmState);
-
-  // for (Region &region : my_op->getRegions()) {
-  //   for (Block &block : region.getBlocks()) {
-  //     for (Operation &op : block.getOperations()) {
-  //       Attribute comment = op.getAttr("str");
-  //       std::ostringstream oss;
-  //       std::string str;
-  //       llvm::raw_string_ostream rso(str);
-  //       comment.print(rso);
-
-  //       // The flush() method is called to make sure all changes are
-  //       committed
-  //       // to the string
-  //       rso.flush();
-
-  //       // Remove the first and last characters (the quotes)
-  //       std::string output = str;
-  //       if (!output.empty()) {
-  //         output.erase(0, 1);                 // Remove the first character
-  //         output.erase(output.size() - 1, 1); // Remove the last character
-  //       }
-  //       llvm::outs() << "comment without quotes: " << output
-  //                    << "\n"; // Outputs: Foo without quotes
-  //     }
-  //   }
-
-  // llvm::outs() << "this region has: " << block.getOperations().size()
-  //              << " operations\n";
-  // }
-
-  // Clear and truncate the file to write the modified content back.
-  // fileStream.seek(0);
-  // fileStream.flush();
 }
+
 /// Perform the actions on the input file indicated by the command line flags
 /// within the specified context.
 ///
@@ -629,20 +559,16 @@ performActions(raw_ostream &os,
   llvm::outs() << "Mlir-opt-main about to print asmstate?\n";
   op.get()->print(os, asmState);
 
-  std::error_code EC;
-  llvm::raw_fd_ostream fileStream("/tmp/output.mlir", EC,
-                                  llvm::sys::fs::OF_Text);
-
-  if (EC) {
-    llvm::errs() << "Error: " << EC.message() << "\n";
-    // Handle error appropriately.
-  }
-  op.get()->print(fileStream, asmState);
   llvm::outs() << "Mlir-opt-main printed asmstate?\n";
   os << '\n';
   llvm::outs() << "Mlir-opt-main actions performed\n";
 
-  mlir_format_process(fileStream, config, context);
+  // Create a raw_string_ostream that writes the IR to a std::string.
+  std::string irStr;
+  llvm::raw_string_ostream rso(irStr);
+  op.get()->print(rso, asmState);
+  rso.flush();
+  mlir_format_process(irStr, config, context);
 
   return success();
 }
@@ -801,7 +727,6 @@ LogicalResult mlir::MlirFormatMain(int argc, char **argv,
 LogicalResult mlir::MlirFormatMain(int argc, char **argv,
                                    llvm::StringRef toolName,
                                    DialectRegistry &registry) {
-
   // Register and parse command line options.
   std::string inputFilename, outputFilename;
   std::tie(inputFilename, outputFilename) =
