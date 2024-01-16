@@ -59,6 +59,7 @@ private:
   Token lexNumber(const char *tokStart);
   Token lexPrefixedIdentifier(const char *tokStart);
   Token lexString(const char *tokStart);
+  Token lexComment(const char *tokStart);
 
   /// Skip a comment line, starting with a '//'.
   void skipComment();

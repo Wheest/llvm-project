@@ -13,7 +13,7 @@
 
 #if !defined(TOK_MARKER) && !defined(TOK_IDENTIFIER) &&                        \
     !defined(TOK_LITERAL) && !defined(TOK_PUNCTUATION) &&                      \
-    !defined(TOK_KEYWORD)
+    !defined(TOK_KEYWORD) && !defined(TOK_COMMENT)
 #error Must define one of the TOK_ macros.
 #endif
 
@@ -31,6 +31,9 @@
 #endif
 #ifndef TOK_KEYWORD
 #define TOK_KEYWORD(SPELLING)
+#endif
+#ifndef TOK_COMMENT
+#define TOK_COMMENT(NAME)
 #endif
 
 // Markers
@@ -126,8 +129,12 @@ TOK_KEYWORD(type)
 TOK_KEYWORD(unit)
 TOK_KEYWORD(vector)
 
+// Comments
+TOK_COMMENT(comment)
+
 #undef TOK_MARKER
 #undef TOK_IDENTIFIER
 #undef TOK_LITERAL
 #undef TOK_PUNCTUATION
 #undef TOK_KEYWORD
+#undef TOK_COMMENT

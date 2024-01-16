@@ -154,8 +154,13 @@ Token Lexer::lexToken() {
 
     case '/':
       if (*curPtr == '/') {
-        skipComment();
-        continue;
+        if (!context->isRetainCommentsEnabled()) {
+          skipComment();
+          continue;
+        } else {
+          // retain comments for purposes e.g., mlir-format
+          return lexComment(tokStart);
+        }
       }
       return emitError(tokStart, "unexpected character");
 
@@ -188,6 +193,7 @@ Token Lexer::lexToken() {
       return lexNumber(tokStart);
     }
   }
+  llvm::outs() << "Parser finished!\n";
 }
 
 /// Lex an '@foo' identifier.
@@ -277,6 +283,28 @@ void Lexer::skipComment() {
       break;
     }
   }
+}
+
+/// Lex a comment, starting with '//'.
+/// The lexer will emit a TOK_COMMENT token.
+///
+///   comment ::= '//' [^\n]* '\n'
+///
+Token Lexer::lexComment(const char *tokStart) {
+  assert(*(curPtr - 1) == '/' && *curPtr == '/');
+  curPtr++; // Move past the second '/'.
+
+  // Move past all characters that are not a newline.
+  while (*curPtr != '\n' && *curPtr != '\r' && *curPtr != 0)
+    curPtr++;
+
+  // We include the newline in the comment token to preserve the original
+  // formatting.
+  if (*curPtr == '\n' || *curPtr == '\r')
+    curPtr++;
+
+  // Form the comment token and return it.
+  return formToken(Token::comment, tokStart);
 }
 
 /// Lex an ellipsis.

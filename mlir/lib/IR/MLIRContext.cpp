@@ -145,6 +145,10 @@ public:
   /// detect such use cases
   bool allowUnregisteredDialects = false;
 
+  /// In most cases, keeping comments is not desired. This option enables to
+  /// keep them, usually for IR formatting purposes
+  bool retainCommentsEnabled = false;
+
   /// Enable support for multi-threading within MLIR.
   bool threadingIsEnabled = true;
 
@@ -570,6 +574,14 @@ void MLIRContext::allowUnregisteredDialects(bool allowing) {
   impl->allowUnregisteredDialects = allowing;
 }
 
+bool MLIRContext::isRetainCommentsEnabled() {
+  return impl->retainCommentsEnabled;
+}
+
+void MLIRContext::enableRetainComments(bool allowing) {
+  impl->retainCommentsEnabled = allowing;
+}
+
 /// Return true if multi-threading is enabled by the context.
 bool MLIRContext::isMultithreadingEnabled() {
   return impl->threadingIsEnabled && llvm::llvm_is_multithreaded();
@@ -864,8 +876,8 @@ void OperationName::UnregisteredOpModel::copyProperties(OpaqueProperties lhs,
                                                         OpaqueProperties rhs) {
   *lhs.as<Attribute *>() = *rhs.as<Attribute *>();
 }
-bool OperationName::UnregisteredOpModel::compareProperties(OpaqueProperties lhs,
-                                                        OpaqueProperties rhs) {
+bool OperationName::UnregisteredOpModel::compareProperties(
+    OpaqueProperties lhs, OpaqueProperties rhs) {
   return *lhs.as<Attribute *>() == *rhs.as<Attribute *>();
 }
 llvm::hash_code

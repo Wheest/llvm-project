@@ -561,6 +561,9 @@ public:
   /// Parse an operation instance that is in the generic form.
   Operation *parseGenericOperation();
 
+  /// Parse a comment
+  Operation *parseComment();
+
   /// Parse different components, viz., use-info of operand(s), successor(s),
   /// region(s), attribute(s) and function-type, of the generic form of an
   /// operation instance and populate the input operation-state 'result' with
@@ -1183,7 +1186,9 @@ ParseResult OperationParser::parseOperation() {
     return codeCompleteStringDialectOrOperationName(nameTok.getStringValue());
   else if (nameTok.isCodeCompletion())
     return codeCompleteDialectOrElidedOpName(loc);
-  else
+  else if (nameTok.is(Token::comment)) {
+    op = parseComment();
+  } else
     return emitWrongTokenError("expected operation name in quotes");
 
   // If parsing of the basic operation failed, then this whole thing fails.
@@ -1396,6 +1401,58 @@ ParseResult OperationParser::parseGenericOperationAfterOpName(
   return success();
 }
 
+Operation *OperationParser::parseComment() {
+  Token tok = getToken();
+  auto srcLocation = getEncodedSourceLocation(getToken().getLoc());
+  StringRef bytes = tok.getSpelling();
+  std::string comment;
+  comment.reserve(bytes.size());
+  for (unsigned i = 2, e = bytes.size(); i != e;) {
+    // skip first two `//` characters
+    auto c = bytes[i++];
+    comment.push_back(c);
+  }
+  if (!comment.empty() && comment.back() == '\n') {
+    comment.pop_back();
+  }
+
+  consumeToken(Token::comment);
+
+  OperationState opState(srcLocation, comment);
+  CleanupOpStateRegions guard{opState};
+
+  StringRef dialectName = "mlirformat";
+
+  if (!getContext()->getLoadedDialect(dialectName) &&
+      !getContext()->getOrLoadDialect(dialectName)) {
+    if (!getContext()->allowsUnregisteredDialects()) {
+      // Emit an error if the dialect couldn't be loaded (i.e., it was not
+      // registered) and unregistered dialects aren't allowed.
+      emitError("operation being parsed with an unregistered dialect. If "
+                "this is intended, please use -allow-unregistered-dialect "
+                "with the MLIR tool used");
+      return nullptr;
+    }
+  } else {
+    // Reload the OperationName now that the dialect is loaded.
+    StringRef op_name = "mlirformat.comment";
+    opState.name = OperationName(op_name, getContext());
+  }
+
+  // If we are populating the parser state, start a new operation definition.
+  if (state.asmState)
+    state.asmState->startOperationDefinition(opState.name);
+
+  opState.addAttribute("str", StringAttr::get(getContext(), comment));
+
+  // Create the operation and try to parse a location for it.
+  Operation *op = opBuilder.create(opState);
+  if (parseTrailingLocationSpecifier(op))
+    return nullptr;
+
+  return op;
+}
+
 Operation *OperationParser::parseGenericOperation() {
   // Get location information for the operation.
   auto srcLocation = getEncodedSourceLocation(getToken().getLoc());
@@ -1437,26 +1494,26 @@ Operation *OperationParser::parseGenericOperation() {
   if (parseGenericOperationAfterOpName(result))
     return nullptr;
 
-  // Operation::create() is not allowed to fail, however setting the properties
-  // from an attribute is a failable operation. So we save the attribute here
-  // and set it on the operation post-parsing.
+  // Operation::create() is not allowed to fail, however setting the
+  // properties from an attribute is a failable operation. So we save the
+  // attribute here and set it on the operation post-parsing.
   Attribute properties;
   std::swap(properties, result.propertiesAttr);
 
   // If we don't have properties in the textual IR, but the operation now has
-  // support for properties, we support some backward-compatible generic syntax
-  // for the operation and as such we accept inherent attributes mixed in the
-  // dictionary of discardable attributes. We pre-validate these here because
-  // invalid attributes can't be casted to the properties storage and will be
-  // silently dropped. For example an attribute { foo = 0 : i32 } that is
-  // declared as F32Attr in ODS would have a C++ type of FloatAttr in the
+  // support for properties, we support some backward-compatible generic
+  // syntax for the operation and as such we accept inherent attributes mixed
+  // in the dictionary of discardable attributes. We pre-validate these here
+  // because invalid attributes can't be casted to the properties storage and
+  // will be silently dropped. For example an attribute { foo = 0 : i32 } that
+  // is declared as F32Attr in ODS would have a C++ type of FloatAttr in the
   // properties array. When setting it we would do something like:
   //
   //   properties.foo = dyn_cast<FloatAttr>(fooAttr);
   //
-  // which would end up with a null Attribute. The diagnostic from the verifier
-  // would be "missing foo attribute" instead of something like "expects a 32
-  // bits float attribute but got a 32 bits integer attribute".
+  // which would end up with a null Attribute. The diagnostic from the
+  // verifier would be "missing foo attribute" instead of something like
+  // "expects a 32 bits float attribute but got a 32 bits integer attribute".
   if (!properties && !result.getRawProperties()) {
     std::optional<RegisteredOperationName> info =
         result.name.getRegisteredInfo();
@@ -1586,8 +1643,8 @@ public:
     return {"", ~0U};
   }
 
-  /// Return the number of declared SSA results.  This returns 4 for the foo.op
-  /// example in the comment for getResultName.
+  /// Return the number of declared SSA results.  This returns 4 for the
+  /// foo.op example in the comment for getResultName.
   size_t getNumResults() const override {
     size_t count = 0;
     for (auto &entry : resultIDs)
@@ -1625,8 +1682,8 @@ public:
     return std::nullopt;
   }
 
-  /// Parse zero or more SSA comma-separated operand references with a specified
-  /// surrounding delimiter, and an optional required operand count.
+  /// Parse zero or more SSA comma-separated operand references with a
+  /// specified surrounding delimiter, and an optional required operand count.
   ParseResult parseOperandList(SmallVectorImpl<UnresolvedOperand> &result,
                                Delimiter delimiter = Delimiter::None,
                                bool allowResultNumber = true,
@@ -1778,7 +1835,8 @@ public:
   //===--------------------------------------------------------------------===//
 
   /// Parse a region that takes `arguments` of `argTypes` types.  This
-  /// effectively defines the SSA values of `arguments` and assigns their type.
+  /// effectively defines the SSA values of `arguments` and assigns their
+  /// type.
   ParseResult parseRegion(Region &region, ArrayRef<Argument> arguments,
                           bool enableNameShadowing) override {
     // Try to parse the region.
@@ -2147,8 +2205,8 @@ ParseResult OperationParser::parseRegionBody(Region &region, SMLoc startLoc,
   Block *block = owningBlock.get();
 
   // If this block is not defined in the source file, add a definition for it
-  // now in the assembly state. Blocks with a name will be defined when the name
-  // is parsed.
+  // now in the assembly state. Blocks with a name will be defined when the
+  // name is parsed.
   if (state.asmState && getToken().isNot(Token::caret_identifier))
     state.asmState->addDefinition(block, startLoc);
 
@@ -2256,15 +2314,15 @@ ParseResult OperationParser::parseBlock(Block *&block) {
       blockAndLoc.block = inflightBlock.get();
     }
 
-    // Otherwise, the block has a forward declaration. Forward declarations are
-    // removed once defined, so if we are defining a existing block and it is
-    // not a forward declaration, then it is a redeclaration. Fail if the block
-    // was already defined.
+    // Otherwise, the block has a forward declaration. Forward declarations
+    // are removed once defined, so if we are defining a existing block and it
+    // is not a forward declaration, then it is a redeclaration. Fail if the
+    // block was already defined.
   } else if (!eraseForwardRef(blockAndLoc.block)) {
     return emitError(nameLoc, "redefinition of block '") << name << "'";
   } else {
-    // This was a forward reference block that is now floating. Keep track of it
-    // as inflight in case of error, so that it gets cleaned up properly.
+    // This was a forward reference block that is now floating. Keep track of
+    // it as inflight in case of error, so that it gets cleaned up properly.
     inflightBlock.reset(blockAndLoc.block);
   }
 
@@ -2283,8 +2341,8 @@ ParseResult OperationParser::parseBlock(Block *&block) {
   // Parse the body of the block.
   ParseResult res = parseBlockBody(block);
 
-  // If parsing was successful, drop the inflight block. We relinquish ownership
-  // back up to the caller.
+  // If parsing was successful, drop the inflight block. We relinquish
+  // ownership back up to the caller.
   if (succeeded(res))
     (void)inflightBlock.release();
   return res;
@@ -2319,8 +2377,8 @@ Block *OperationParser::getBlockNamed(StringRef name, SMLoc loc) {
   return blockDef.block;
 }
 
-/// Parse a (possibly empty) list of SSA operands with types as block arguments
-/// enclosed in parentheses.
+/// Parse a (possibly empty) list of SSA operands with types as block
+/// arguments enclosed in parentheses.
 ///
 ///   value-id-and-type-list ::= value-id-and-type (`,` ssa-id-and-type)*
 ///   block-arg-list ::= `(` value-id-and-type-list? `)`
@@ -2383,8 +2441,8 @@ ParseResult OperationParser::codeCompleteSSAUse() {
         continue;
       Value frontValue = it.second.front().value;
 
-      // If the value isn't a forward reference, we also add the name of the op
-      // to the detail.
+      // If the value isn't a forward reference, we also add the name of the
+      // op to the detail.
       if (auto result = dyn_cast<OpResult>(frontValue)) {
         if (!forwardRefPlaceholders.count(result))
           detailOS << result.getOwner()->getName() << ": ";
@@ -2397,8 +2455,8 @@ ParseResult OperationParser::codeCompleteSSAUse() {
       detailOS << frontValue.getType();
 
       // FIXME: We should define a policy for packed values, e.g. with a limit
-      // on the detail size, but it isn't clear what would be useful right now.
-      // For now we just only emit the first type.
+      // on the detail size, but it isn't clear what would be useful right
+      // now. For now we just only emit the first type.
       if (it.second.size() > 1)
         detailOS << ", ...";
 

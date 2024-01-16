@@ -142,6 +142,12 @@ public:
   ///  operations) without being caught by assertions or other means.
   void allowUnregisteredDialects(bool allow = true);
 
+  /// Return true if we retain comments in the IR.
+  bool isRetainCommentsEnabled();
+
+  /// Enables retaining comments in the IR.
+  void enableRetainComments(bool allow = true);
+
   /// Return true if multi-threading is enabled by the context.
   bool isMultithreadingEnabled();
 

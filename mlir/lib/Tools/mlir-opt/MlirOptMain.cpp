@@ -36,6 +36,7 @@
 #include "mlir/Tools/ParseUtilities.h"
 #include "mlir/Tools/Plugins/DialectPlugin.h"
 #include "mlir/Tools/Plugins/PassPlugin.h"
+#include "mlir/Tools/mlir-opt/MlirOptUtil.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileUtilities.h"
@@ -316,8 +317,8 @@ static LogicalResult doVerifyRoundTrip(Operation *op,
   return success();
 }
 
-static LogicalResult doVerifyRoundTrip(Operation *op,
-                                       const MlirOptMainConfig &config) {
+LogicalResult doVerifyRoundTrip(Operation *op,
+                                const MlirOptMainConfig &config) {
   // Textual round-trip isn't fully robust at the moment (for example implicit
   // terminator are losing location informations).
 
