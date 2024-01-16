@@ -53,18 +53,12 @@ std::string process_comment(std::string line, const MlirOptMainConfig &config,
   AsmState asmState(op.get(), OpPrintingFlags(), /*locationMap=*/nullptr,
                     &fallbackResourceMap);
 
-  llvm::raw_fd_ostream fileStream2("/tmp/output_post.mlir", EC,
-                                   llvm::sys::fs::OF_Text);
-
-  if (EC) {
-    llvm::errs() << "Error: " << EC.message() << "\n";
-    // Handle error appropriately.
-  }
-  auto my_op = op.get();
-  std::string comment_str;
   // Fetch the comment op, and extract its attrs
   // expect only on op in this region
-  for (Region &region : my_op->getRegions()) {
+  auto full_op = op.get();
+  std::string comment_str;
+
+  for (Region &region : full_op->getRegions()) {
     for (Block &block : region.getBlocks()) {
       for (Operation &op : block.getOperations()) {
         Attribute comment_attr = op.getAttr("str");
@@ -88,7 +82,7 @@ std::string process_comment(std::string line, const MlirOptMainConfig &config,
   return comment_str;
 }
 
-void mlir_format_post_process(std::string &fileStr,
+void mlir_format_post_process(raw_ostream &os, std::string &fileStr,
                               const MlirOptMainConfig &config,
                               MLIRContext *context, bool removeModule) {
   // performs post-processing on the printed MLIR IR
@@ -108,7 +102,6 @@ void mlir_format_post_process(std::string &fileStr,
     }
     lines.push_back(line);
   }
-  llvm::outs() << "searched for line comments!\n";
 
   // Remove the inserted module wrapping
   if (removeModule && !lines.empty() && lines.front() == "module {") {
@@ -134,17 +127,9 @@ void mlir_format_post_process(std::string &fileStr,
     }
   }
 
-  // Write the modified lines back to the file
-  const std::string outputFilePath = "/tmp/output_mod.mlir";
-  std::error_code EC;
-  llvm::raw_fd_ostream outputFile(outputFilePath, EC, llvm::sys::fs::OF_Text);
-  if (EC) {
-    llvm::errs() << "Error opening file for writing: " << outputFilePath
-                 << "\n";
-    return;
-  }
+  // Write the modified lines back to the final output stream
   for (const auto &modLine : lines) {
-    outputFile << modLine << "\n";
+    os << modLine << "\n";
   }
 }
 
@@ -230,32 +215,20 @@ static LogicalResult performActions(
   if (failed(pm.run(*op)))
     return failure();
 
-  // Print the output.
+  // Print the output to a string we can perform post-processing on
   TimingScope outputTiming = timing.nest("Output");
   if (config.shouldEmitBytecode()) {
-    BytecodeWriterConfig writerConfig(fallbackResourceMap);
-    if (auto v = config.bytecodeVersionToEmit())
-      writerConfig.setDesiredBytecodeVersion(*v);
-    if (config.shouldElideResourceDataFromBytecode())
-      writerConfig.setElideResourceDataFlag();
-    return writeBytecodeToFile(op.get(), os, writerConfig);
+    return failure();
   }
-
-  if (config.bytecodeVersionToEmit().has_value())
-    return emitError(UnknownLoc::get(pm.getContext()))
-           << "bytecode version while not emitting bytecode";
   AsmState asmState(op.get(), OpPrintingFlags(), /*locationMap=*/nullptr,
                     &fallbackResourceMap);
-  op.get()->print(os, asmState);
-  os << '\n';
-
-  // Create a raw_string_ostream that writes the IR to a std::string.
   std::string irStr;
   llvm::raw_string_ostream rso(irStr);
   op.get()->print(rso, asmState);
   rso.flush();
 
-  mlir_format_post_process(irStr, config, context, removeModule);
+  // Run the post-processing and write formatted IR to os
+  mlir_format_post_process(os, irStr, config, context, removeModule);
 
   return success();
 }
