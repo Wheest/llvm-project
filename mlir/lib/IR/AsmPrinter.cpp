@@ -1416,9 +1416,7 @@ void SSANameState::printValueID(Value value, bool printResultNo,
   }
 
   stream << '%';
-  if (!value.getContext()->getAliasName(&value).empty()) {
-    stream << value.getContext()->getAliasName(&value);
-  } else if (it->second != NameSentinel) {
+  if (it->second != NameSentinel) {
     stream << it->second;
   } else {
     auto nameIt = valueNames.find(lookupValue);
@@ -1580,9 +1578,13 @@ void SSANameState::numberValuesInOp(Operation &op) {
   }
   Value resultBegin = op.getResult(0);
 
-  // If the first result wasn't numbered, give it a default number.
-  if (valueIDs.try_emplace(resultBegin, nextValueID).second)
+  if (!resultBegin.getSsaName().empty()) {
+    valueIDs[resultBegin] = NameSentinel;
+    valueNames[resultBegin] = resultBegin.getSsaName();
+  } else if (valueIDs.try_emplace(resultBegin, nextValueID).second) {
+    // If the first result wasn't numbered, give it a default number.
     ++nextValueID;
+  }
 
   // If this operation has multiple result groups, mark it.
   if (resultGroups.size() != 1) {
@@ -1631,8 +1633,11 @@ void SSANameState::getResultIDAndNumber(
 }
 
 void SSANameState::setValueName(Value value, StringRef name) {
-  // If the name is empty, the value uses the default numbering.
-  if (name.empty()) {
+
+  if (!value.getSsaName().empty()) {
+    name = value.getSsaName();
+  } else if (name.empty()) {
+    // If the name is empty, the value uses the default numbering.
     valueIDs[value] = nextValueID++;
     return;
   }

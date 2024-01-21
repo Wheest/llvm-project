@@ -68,6 +68,9 @@ public:
   /// Return the kind of this value.
   Kind getKind() const { return typeAndKind.getInt(); }
 
+  /// Explicit SSA name for debugging purposes
+  std::string _ssaName;
+
 protected:
   ValueImpl(Type type, Kind kind) : typeAndKind(type, kind) {}
 
@@ -230,6 +233,8 @@ public:
   void print(raw_ostream &os, const OpPrintingFlags &flags) const;
   void print(raw_ostream &os, AsmState &state) const;
   void dump() const;
+  llvm::StringRef getSsaName() const { return llvm::StringRef(impl->_ssaName); }
+  void setSsaName(std::string name) { impl->_ssaName = name; }
 
   /// Print this value as if it were an operand.
   void printAsOperand(raw_ostream &os, AsmState &state) const;

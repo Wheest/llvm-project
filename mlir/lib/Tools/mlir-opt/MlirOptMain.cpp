@@ -149,6 +149,11 @@ struct MlirOptMainConfigCLOptions : public MlirOptMainConfig {
         cl::desc("Round-trip the IR after parsing and ensure it succeeds"),
         cl::location(verifyRoundtripFlag), cl::init(false));
 
+    static cl::opt<bool, /*ExternalStorage=*/true> retainIdentifierNames(
+        "retain-identifier-names",
+        cl::desc("Retain the original names of identifiers when printing"),
+        cl::location(retainIdentifierNamesFlag), cl::init(false));
+
     static cl::list<std::string> passPlugins(
         "load-pass-plugin", cl::desc("Load passes from plugin library"));
 
@@ -292,8 +297,9 @@ static LogicalResult doVerifyRoundTrip(Operation *op,
                 OpPrintingFlags().printGenericOpForm(false).enableDebugInfo());
     }
     FallbackAsmResourceMap fallbackResourceMap;
-    ParserConfig parseConfig(&roundtripContext, /*verifyAfterParse=*/true,
-                             &fallbackResourceMap);
+    ParserConfig parseConfig(
+        &roundtripContext, /*verifyAfterParse=*/true, &fallbackResourceMap,
+        /*retainIdentifierNames*/ config.shouldRetainIdentifierNames());
     roundtripModule =
         parseSourceString<Operation *>(ostream.str(), parseConfig);
     if (!roundtripModule) {

@@ -900,6 +900,11 @@ ParseResult OperationParser::addDefinition(UnresolvedOperand useInfo,
                                            Value value) {
   auto &entries = getSSAValueEntry(useInfo.name);
 
+  /// Register the alias name for use in printing
+  if (true || state.config.shouldRetainIdentifierNames()) {
+    value.setSsaName(std::string(useInfo.name.drop_front(1)));
+  }
+
   // Make sure there is a slot for this value.
   if (entries.size() <= useInfo.number)
     entries.resize(useInfo.number + 1);
@@ -938,10 +943,6 @@ ParseResult OperationParser::addDefinition(UnresolvedOperand useInfo,
   /// Record this definition for the current scope.
   entries[useInfo.number] = {value, useInfo.location};
   recordDefinition(useInfo.name);
-
-  /// Register the alias name for use in printing
-  llvm::StringRef modifiedName = useInfo.name.drop_front(1);
-  getContext()->setAliasName(&value, modifiedName);
 
   return success();
 }

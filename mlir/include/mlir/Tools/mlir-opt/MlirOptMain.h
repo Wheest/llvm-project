@@ -176,6 +176,13 @@ public:
   /// Reproducer file generation (no crash required).
   StringRef getReproducerFilename() const { return generateReproducerFileFlag; }
 
+  /// Print the pass-pipeline as text before executing.
+  MlirOptMainConfig &retainIdentifierNames(bool retain) {
+    retainIdentifierNamesFlag = retain;
+    return *this;
+  }
+  bool shouldRetainIdentifierNames() const { return retainIdentifierNamesFlag; }
+
 protected:
   /// Allow operation with no registered dialects.
   /// This option is for convenience during testing only and discouraged in
@@ -231,6 +238,9 @@ protected:
 
   /// Verify that the input IR round-trips perfectly.
   bool verifyRoundtripFlag = false;
+
+  /// Retain identifier names in the output.
+  bool retainIdentifierNamesFlag = false;
 
   /// The reproducer output filename (no crash required).
   std::string generateReproducerFileFlag = "";
