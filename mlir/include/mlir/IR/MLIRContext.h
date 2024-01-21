@@ -12,6 +12,7 @@
 #include "mlir/Support/LLVM.h"
 #include "mlir/Support/TypeID.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include <functional>
 #include <memory>
 #include <vector>
@@ -34,6 +35,8 @@ class MLIRContextImpl;
 class RegisteredOperationName;
 class StorageUniquer;
 class IRUnit;
+class Value;
+class Operation;
 
 /// MLIRContext is the top-level object for a collection of MLIR operations. It
 /// holds immortal uniqued objects like types, and the tables used to unique
@@ -239,6 +242,11 @@ public:
   /// context registry correlates to loaded dialects and their entities
   /// (attributes, operations, types, etc.).
   llvm::hash_code getRegistryHash();
+
+  ///===--------------------------------------------------------------------===//
+  llvm::DenseMap<Operation *, llvm::StringRef> valueToAlias;
+  void setAliasName(Value *value, llvm::StringRef aliasName);
+  llvm::StringRef getAliasName(Value *value);
 
   //===--------------------------------------------------------------------===//
   // Action API

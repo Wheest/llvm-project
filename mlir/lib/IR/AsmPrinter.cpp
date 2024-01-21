@@ -72,13 +72,12 @@ OpAsmParser::~OpAsmParser() = default;
 MLIRContext *AsmParser::getContext() const { return getBuilder().getContext(); }
 
 /// Parse a type list.
-/// This is out-of-line to work-around https://github.com/llvm/llvm-project/issues/62918
+/// This is out-of-line to work-around
+/// https://github.com/llvm/llvm-project/issues/62918
 ParseResult AsmParser::parseTypeList(SmallVectorImpl<Type> &result) {
-    return parseCommaSeparatedList(
-        [&]() { return parseType(result.emplace_back()); });
-  }
-
-
+  return parseCommaSeparatedList(
+      [&]() { return parseType(result.emplace_back()); });
+}
 
 //===----------------------------------------------------------------------===//
 // DialectAsmPrinter
@@ -1417,7 +1416,9 @@ void SSANameState::printValueID(Value value, bool printResultNo,
   }
 
   stream << '%';
-  if (it->second != NameSentinel) {
+  if (!value.getContext()->getAliasName(&value).empty()) {
+    stream << value.getContext()->getAliasName(&value);
+  } else if (it->second != NameSentinel) {
     stream << it->second;
   } else {
     auto nameIt = valueNames.find(lookupValue);

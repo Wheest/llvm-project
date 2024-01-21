@@ -938,6 +938,11 @@ ParseResult OperationParser::addDefinition(UnresolvedOperand useInfo,
   /// Record this definition for the current scope.
   entries[useInfo.number] = {value, useInfo.location};
   recordDefinition(useInfo.name);
+
+  /// Register the alias name for use in printing
+  llvm::StringRef modifiedName = useInfo.name.drop_front(1);
+  getContext()->setAliasName(&value, modifiedName);
+
   return success();
 }
 

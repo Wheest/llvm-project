@@ -392,6 +392,14 @@ void MLIRContext::executeActionInternal(function_ref<void()> actionFn,
 
 bool MLIRContext::hasActionHandler() { return (bool)getImpl().actionHandler; }
 
+void MLIRContext::setAliasName(Value *value, llvm::StringRef aliasName) {
+  valueToAlias[value->getDefiningOp()] = aliasName;
+}
+llvm::StringRef MLIRContext::getAliasName(Value *value) {
+  auto found = valueToAlias.find(value->getDefiningOp());
+  return (found != valueToAlias.end()) ? found->second : llvm::StringRef();
+}
+
 //===----------------------------------------------------------------------===//
 // Diagnostic Handlers
 //===----------------------------------------------------------------------===//
