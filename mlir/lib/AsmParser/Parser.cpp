@@ -900,11 +900,6 @@ ParseResult OperationParser::addDefinition(UnresolvedOperand useInfo,
                                            Value value) {
   auto &entries = getSSAValueEntry(useInfo.name);
 
-  /// Register the alias name for use in printing
-  if (true || state.config.shouldRetainIdentifierNames()) {
-    value.setSsaName(std::string(useInfo.name.drop_front(1)));
-  }
-
   // Make sure there is a slot for this value.
   if (entries.size() <= useInfo.number)
     entries.resize(useInfo.number + 1);
@@ -1226,6 +1221,22 @@ ParseResult OperationParser::parseOperation() {
         if (addDefinition({std::get<2>(resIt), std::get<0>(resIt), subRes},
                           op->getResult(opResI++)))
           return failure();
+      }
+    }
+
+    // If enabled, store the SSA name(s) for the operation
+    if (true) {
+      if (opResI == 1) {
+        for (ResultRecord &resIt : resultIDs) {
+          for (unsigned subRes : llvm::seq<unsigned>(0, std::get<1>(resIt))) {
+            op->setDiscardableAttr(
+                "_ssaName", StringAttr::get(getContext(),
+                                            std::get<0>(resIt).drop_front(1)));
+          }
+        }
+      } else if (opResI > 1) {
+        emitError(
+            "have not yet implemented support for multiple return values");
       }
     }
 

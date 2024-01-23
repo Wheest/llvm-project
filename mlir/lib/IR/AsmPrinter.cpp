@@ -1578,10 +1578,13 @@ void SSANameState::numberValuesInOp(Operation &op) {
   }
   Value resultBegin = op.getResult(0);
 
-  if (!resultBegin.getSsaName().empty()) {
-    valueIDs[resultBegin] = NameSentinel;
-    valueNames[resultBegin] = resultBegin.getSsaName();
-  } else if (valueIDs.try_emplace(resultBegin, nextValueID).second) {
+  // Get the original SSA for the result if available
+  if (StringAttr ssaNameAttr = op.getAttrOfType<StringAttr>("_ssaName")) {
+    setValueName(resultBegin, ssaNameAttr.strref());
+    op.removeDiscardableAttr("_ssaName");
+  }
+
+  if (valueIDs.try_emplace(resultBegin, nextValueID).second) {
     // If the first result wasn't numbered, give it a default number.
     ++nextValueID;
   }
@@ -1634,9 +1637,7 @@ void SSANameState::getResultIDAndNumber(
 
 void SSANameState::setValueName(Value value, StringRef name) {
 
-  if (!value.getSsaName().empty()) {
-    name = value.getSsaName();
-  } else if (name.empty()) {
+  if (name.empty()) {
     // If the name is empty, the value uses the default numbering.
     valueIDs[value] = nextValueID++;
     return;
