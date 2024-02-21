@@ -364,6 +364,7 @@ performActions(raw_ostream &os,
   // untouched.
   PassReproducerOptions reproOptions;
   FallbackAsmResourceMap fallbackResourceMap;
+  mlir::DenseMap<Value, StringRef> identifierNameMap;
   ParserConfig parseConfig(
       context, /*verifyAfterParse=*/true, &fallbackResourceMap,
       /*retainIdentifierName=*/config.shouldRetainIdentifierNames());
@@ -373,7 +374,8 @@ performActions(raw_ostream &os,
   // Parse the input file and reset the context threading state.
   TimingScope parserTiming = timing.nest("Parser");
   OwningOpRef<Operation *> op = parseSourceFileForTool(
-      sourceMgr, parseConfig, !config.shouldUseExplicitModule());
+      sourceMgr, parseConfig, !config.shouldUseExplicitModule(),
+      &identifierNameMap);
   parserTiming.stop();
   if (!op)
     return failure();
@@ -423,7 +425,7 @@ performActions(raw_ostream &os,
     return emitError(UnknownLoc::get(pm.getContext()))
            << "bytecode version while not emitting bytecode";
   AsmState asmState(op.get(), OpPrintingFlags(), /*locationMap=*/nullptr,
-                    &fallbackResourceMap);
+                    &fallbackResourceMap, &identifierNameMap);
   op.get()->print(os, asmState);
   os << '\n';
   return success();

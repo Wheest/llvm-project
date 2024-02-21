@@ -41,7 +41,8 @@ LogicalResult
 parseAsmSourceFile(const llvm::SourceMgr &sourceMgr, Block *block,
                    const ParserConfig &config,
                    AsmParserState *asmState = nullptr,
-                   AsmParserCodeCompleteContext *codeCompleteContext = nullptr);
+                   AsmParserCodeCompleteContext *codeCompleteContext = nullptr,
+                   DenseMap<Value, StringRef> *identifierNameMap = nullptr);
 
 /// This parses a single MLIR attribute to an MLIR context if it was valid. If
 /// not, an error diagnostic is emitted to the context and a null value is

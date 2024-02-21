@@ -51,11 +51,13 @@ struct SymbolState {
 struct ParserState {
   ParserState(const llvm::SourceMgr &sourceMgr, const ParserConfig &config,
               SymbolState &symbols, AsmParserState *asmState,
-              AsmParserCodeCompleteContext *codeCompleteContext)
+              AsmParserCodeCompleteContext *codeCompleteContext,
+              DenseMap<Value, StringRef> *identifierNameMap = nullptr)
       : config(config),
         lex(sourceMgr, config.getContext(), codeCompleteContext),
         curToken(lex.lexToken()), lastToken(Token::error, ""), symbols(symbols),
-        asmState(asmState), codeCompleteContext(codeCompleteContext) {}
+        asmState(asmState), codeCompleteContext(codeCompleteContext),
+        identifierNameMap(identifierNameMap) {}
   ParserState(const ParserState &) = delete;
   void operator=(const ParserState &) = delete;
 
@@ -91,6 +93,8 @@ struct ParserState {
   // popped when done. At the top-level we start with "builtin" as the
   // default, so that the top-level `module` operation parses as-is.
   SmallVector<StringRef> defaultDialectStack{"builtin"};
+
+  DenseMap<Value, StringRef> *identifierNameMap;
 };
 
 } // namespace detail

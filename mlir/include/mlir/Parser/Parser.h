@@ -90,8 +90,9 @@ inline OwningOpRef<ContainerOpT> constructContainerOpForParserIfNecessary(
 /// registered in the context, and failure is returned. If `sourceFileLoc` is
 /// non-null, it is populated with a file location representing the start of the
 /// source file that is being parsed.
-LogicalResult parseSourceFile(const llvm::SourceMgr &sourceMgr, Block *block,
-                              const ParserConfig &config,
+LogicalResult parseSourceFile(const llvm::SourceMgr &sourceMgr,
+                              DenseMap<Value, StringRef> *identifierNameMap,
+                              Block *block, const ParserConfig &config,
                               LocationAttr *sourceFileLoc = nullptr);
 /// An overload with a source manager that may have references taken during the
 /// parsing process, and whose lifetime can be freely extended (such that the
@@ -99,6 +100,7 @@ LogicalResult parseSourceFile(const llvm::SourceMgr &sourceMgr, Block *block,
 /// example, to avoid copying some large resources into the MLIRContext and
 /// instead referencing the data directly from the input buffers.
 LogicalResult parseSourceFile(const std::shared_ptr<llvm::SourceMgr> &sourceMgr,
+                              DenseMap<Value, StringRef> *identifierNameMap,
                               Block *block, const ParserConfig &config,
                               LocationAttr *sourceFileLoc = nullptr);
 
@@ -174,8 +176,10 @@ inline OwningOpRef<ContainerOpT> parseSourceFile(const ParserConfig &config,
 /// `SingleBlockImplicitTerminator` trait.
 template <typename ContainerOpT = Operation *>
 inline OwningOpRef<ContainerOpT>
-parseSourceFile(const llvm::SourceMgr &sourceMgr, const ParserConfig &config) {
-  return detail::parseSourceFile<ContainerOpT>(config, sourceMgr);
+parseSourceFile(const llvm::SourceMgr &sourceMgr, const ParserConfig &config,
+                DenseMap<Value, StringRef> *identifierNameMap = nullptr) {
+  return detail::parseSourceFile<ContainerOpT>(config, sourceMgr,
+                                               identifierNameMap);
 }
 /// An overload with a source manager that may have references taken during the
 /// parsing process, and whose lifetime can be freely extended (such that the
@@ -185,8 +189,10 @@ parseSourceFile(const llvm::SourceMgr &sourceMgr, const ParserConfig &config) {
 template <typename ContainerOpT = Operation *>
 inline OwningOpRef<ContainerOpT>
 parseSourceFile(const std::shared_ptr<llvm::SourceMgr> &sourceMgr,
-                const ParserConfig &config) {
-  return detail::parseSourceFile<ContainerOpT>(config, sourceMgr);
+                const ParserConfig &config,
+                DenseMap<Value, StringRef> *identifierNameMap = nullptr) {
+  return detail::parseSourceFile<ContainerOpT>(config, sourceMgr,
+                                               identifierNameMap);
 }
 
 /// This parses the file specified by the indicated filename. If the source IR

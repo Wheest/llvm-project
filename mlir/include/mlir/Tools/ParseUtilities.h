@@ -23,14 +23,15 @@ namespace mlir {
 /// error handler registered in the context.
 /// If 'insertImplicitModule' is true a top-level 'builtin.module' op will be
 /// inserted that contains the parsed IR, unless one exists already.
-inline OwningOpRef<Operation *>
-parseSourceFileForTool(const std::shared_ptr<llvm::SourceMgr> &sourceMgr,
-                       const ParserConfig &config, bool insertImplicitModule) {
+inline OwningOpRef<Operation *> parseSourceFileForTool(
+    const std::shared_ptr<llvm::SourceMgr> &sourceMgr,
+    const ParserConfig &config, bool insertImplicitModule,
+    DenseMap<Value, StringRef> *identifierNameMap = nullptr) {
   if (insertImplicitModule) {
     // TODO: Move implicit module logic out of 'parseSourceFile' and into here.
-    return parseSourceFile<ModuleOp>(sourceMgr, config);
+    return parseSourceFile<ModuleOp>(sourceMgr, config, identifierNameMap);
   }
-  return parseSourceFile(sourceMgr, config);
+  return parseSourceFile(sourceMgr, config, identifierNameMap);
 }
 } // namespace mlir
 

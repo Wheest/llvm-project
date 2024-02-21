@@ -1257,7 +1257,8 @@ public:
   /// A sentinel value used for values with names set.
   enum : unsigned { NameSentinel = ~0U };
 
-  SSANameState(Operation *op, const OpPrintingFlags &printerFlags);
+  SSANameState(Operation *op, const OpPrintingFlags &printerFlags,
+               DenseMap<Value, StringRef> *identifierNameMap);
   SSANameState() = default;
 
   /// Print the SSA identifier for the given value to 'stream'. If
@@ -1279,6 +1280,9 @@ public:
   /// SSA values in namesToUse. See OperationPrinter::shadowRegionArgs for
   /// details.
   void shadowRegionArgs(Region &region, ValueRange namesToUse);
+
+  DenseMap<Value, StringRef> *identifierNameMap;
+  DenseSet<Value> seenValues;
 
 private:
   /// Number the SSA values within the given IR unit.
@@ -1344,8 +1348,9 @@ private:
 };
 } // namespace
 
-SSANameState::SSANameState(Operation *op, const OpPrintingFlags &printerFlags)
-    : printerFlags(printerFlags) {
+SSANameState::SSANameState(Operation *op, const OpPrintingFlags &printerFlags,
+                           DenseMap<Value, StringRef> *identifierNameMap)
+    : identifierNameMap(identifierNameMap), printerFlags(printerFlags) {
   llvm::SaveAndRestore valueIDSaver(nextValueID);
   llvm::SaveAndRestore argumentIDSaver(nextArgumentID);
   llvm::SaveAndRestore conflictIDSaver(nextConflictID);
@@ -1611,61 +1616,57 @@ void SSANameState::numberValuesInOp(Operation &op) {
 void SSANameState::setRetainedIdentifierNames(Operation &op,
                                               SmallVector<int, 2> &resultGroups,
                                               bool hasRegion) {
-
-  // Lambda which fetches the list of relevant attributes (e.g.,
-  // mlir.resultNames) and associates them with the relevant values
+  // Lambda which associates Values with the relevant names
   auto handleNamedAttributes =
-      [this](Operation &op, const Twine &attrName, auto getValuesFunc,
+      [this](Operation &op, auto getValuesFunc,
              std::optional<std::function<void(int)>> customAction =
                  std::nullopt) {
-        if (ArrayAttr namesAttr = op.getAttrOfType<ArrayAttr>(attrName.str())) {
-          auto names = namesAttr.getValue();
-          auto values = getValuesFunc();
-          // Conservative in case the number of values has changed
-          for (size_t i = 0; i < values.size() && i < names.size(); ++i) {
-            auto name = names[i].cast<StringAttr>().strref();
-            if (!name.empty()) {
-              if (!this->usedNames.count(name))
-                this->setValueName(values[i], name, true);
-              if (customAction.has_value())
-                customAction.value()(i);
+        auto values = getValuesFunc();
+
+        for (size_t i = 0; i < values.size(); ++i) {
+          if (!seenValues.count(values[i])) {
+            auto it = identifierNameMap->find(values[i]);
+            if (it != identifierNameMap->end()) {
+              this->setValueName(values[i], it->second, true);
+              seenValues.insert(values[i]);
             }
           }
-          op.removeDiscardableAttr(attrName.str());
         }
       };
 
-  if (hasRegion) {
+  if (!identifierNameMap) {
+    return;
+  } else if (hasRegion) {
     // Get the original name(s) for the region arg(s) if available (e.g., for
     // FuncOp args).  Requires hasRegion flag to ensure scoping is correct
     if (hasRegion && op.getNumRegions() > 0 &&
         op.getRegion(0).getNumArguments() > 0) {
-      handleNamedAttributes(op, "mlir.regionArgNames",
+      handleNamedAttributes(op,
                             [&]() { return op.getRegion(0).getArguments(); });
     }
   } else {
     // Get the original names for the results if available
     handleNamedAttributes(
-        op, "mlir.resultNames", [&]() { return op.getResults(); },
+        op, [&]() { return op.getResults(); },
         [&resultGroups](int i) { /*handles result groups*/
                                  if (i > 0)
                                    resultGroups.push_back(i);
         });
 
     // Get the original name for the op args if available
-    handleNamedAttributes(op, "mlir.opArgNames",
-                          [&]() { return op.getOperands(); });
+    handleNamedAttributes(op, [&]() { return op.getOperands(); });
 
     // Get the original name for the block if available
-    if (StringAttr blockNameAttr =
-            op.getAttrOfType<StringAttr>("mlir.blockName")) {
-      blockNames[op.getBlock()] = {-1, blockNameAttr.strref()};
-      op.removeDiscardableAttr("mlir.blockName");
-    }
+    // if (StringAttr blockNameAttr =
+    //         op.getAttrOfType<StringAttr>("mlir.blockName")) {
+    //   blockNames[op.getBlock()] = {-1, blockNameAttr.strref()};
+    //   op.removeDiscardableAttr("mlir.blockName");
+    // }
 
     // Get the original name(s) for the block arg(s) if available
-    handleNamedAttributes(op, "mlir.blockArgNames",
-                          [&]() { return op.getBlock()->getArguments(); });
+    // handleNamedAttributes(op, "mlir.blockArgNames",
+    //                       [&]() { return op.getBlock()->getArguments(); });
+    // llvm::outs() << "blockargnames handled\n";
   }
   return;
 }
@@ -1695,7 +1696,8 @@ void SSANameState::getResultIDAndNumber(
     return;
   }
 
-  // Find the correct index using a binary search, as the groups are ordered.
+  // Find the correct index using a binary search, as the groups are
+  // ordered.
   ArrayRef<int> resultGroups = resultGroupIt->second;
   const auto *it = llvm::upper_bound(resultGroups, resultNo);
   int groupResultNo = 0, groupSize = 0;
@@ -1737,9 +1739,9 @@ StringRef SSANameState::uniqueValueName(StringRef name, bool allowNumeric) {
   if (!usedNames.count(name)) {
     name = name.copy(usedNameAllocator);
   } else {
-    // Otherwise, we had a conflict - probe until we find a unique name. This
-    // is guaranteed to terminate (and usually in a single iteration) because it
-    // generates new names by incrementing nextConflictID.
+    // Otherwise, we had a conflict - probe until we find a unique name.
+    // This is guaranteed to terminate (and usually in a single iteration)
+    // because it generates new names by incrementing nextConflictID.
     SmallString<64> probeName(name);
     probeName.push_back('_');
     while (true) {
@@ -1874,8 +1876,10 @@ namespace detail {
 class AsmStateImpl {
 public:
   explicit AsmStateImpl(Operation *op, const OpPrintingFlags &printerFlags,
-                        AsmState::LocationMap *locationMap)
-      : interfaces(op->getContext()), nameState(op, printerFlags),
+                        AsmState::LocationMap *locationMap,
+                        DenseMap<Value, StringRef> *identifierNameMap = nullptr)
+      : interfaces(op->getContext()),
+        nameState(op, printerFlags, identifierNameMap),
         printerFlags(printerFlags), locationMap(locationMap) {}
   explicit AsmStateImpl(MLIRContext *ctx, const OpPrintingFlags &printerFlags,
                         AsmState::LocationMap *locationMap)
@@ -1909,8 +1913,8 @@ public:
   /// Get the printer flags.
   const OpPrintingFlags &getPrinterFlags() const { return printerFlags; }
 
-  /// Register the location, line and column, within the buffer that the given
-  /// operation was printed at.
+  /// Register the location, line and column, within the buffer that the
+  /// given operation was printed at.
   void registerOperationLocation(Operation *op, unsigned line, unsigned col) {
     if (locationMap)
       (*locationMap)[op] = std::make_pair(line, col);
@@ -1977,9 +1981,9 @@ void printDimensionList(raw_ostream &stream, Range &&shape) {
 } // namespace detail
 } // namespace mlir
 
-/// Verifies the operation and switches to generic op printing if verification
-/// fails. We need to do this because custom print functions may fail for
-/// invalid ops.
+/// Verifies the operation and switches to generic op printing if
+/// verification fails. We need to do this because custom print functions
+/// may fail for invalid ops.
 static OpPrintingFlags verifyOpAndAdjustFlags(Operation *op,
                                               OpPrintingFlags printerFlags) {
   if (printerFlags.shouldPrintGenericOpForm() ||
@@ -2013,9 +2017,11 @@ static OpPrintingFlags verifyOpAndAdjustFlags(Operation *op,
 }
 
 AsmState::AsmState(Operation *op, const OpPrintingFlags &printerFlags,
-                   LocationMap *locationMap, FallbackAsmResourceMap *map)
+                   LocationMap *locationMap, FallbackAsmResourceMap *map,
+                   DenseMap<Value, StringRef> *identifierNameMap)
     : impl(std::make_unique<AsmStateImpl>(
-          op, verifyOpAndAdjustFlags(op, printerFlags), locationMap)) {
+          op, verifyOpAndAdjustFlags(op, printerFlags), locationMap,
+          identifierNameMap)) {
   if (map)
     attachFallbackResourcePrinter(*map);
 }
@@ -2142,7 +2148,8 @@ static void printFloatValue(const APFloat &apValue, raw_ostream &os) {
   bool isNaN = apValue.isNaN();
   if (!isInf && !isNaN) {
     SmallString<128> strValue;
-    apValue.toString(strValue, /*FormatPrecision=*/6, /*FormatMaxPadding=*/0,
+    apValue.toString(strValue, /*FormatPrecision=*/6,
+                     /*FormatMaxPadding=*/0,
                      /*TruncateZero=*/false);
 
     // Check to make sure that the stringized number is not some string like
@@ -2172,8 +2179,8 @@ static void printFloatValue(const APFloat &apValue, raw_ostream &os) {
     }
   }
 
-  // Print special values in hexadecimal format. The sign bit should be included
-  // in the literal.
+  // Print special values in hexadecimal format. The sign bit should be
+  // included in the literal.
   SmallVector<char, 16> str;
   APInt apInt = apValue.bitcastToAPInt();
   apInt.toString(str, /*Radix=*/16, /*Signed=*/false,
@@ -2198,8 +2205,8 @@ void AsmPrinter::Impl::printResourceHandle(
   state.getDialectResources()[resource.getDialect()].insert(resource);
 }
 
-/// Returns true if the given dialect symbol data is simple enough to print in
-/// the pretty form. This is essentially when the symbol takes the form:
+/// Returns true if the given dialect symbol data is simple enough to print
+/// in the pretty form. This is essentially when the symbol takes the form:
 ///   identifier (`<` body `>`)?
 static bool isDialectSymbolSimpleEnoughForPrettyForm(StringRef symName) {
   // The name must start with an identifier.
@@ -2213,8 +2220,8 @@ static bool isDialectSymbolSimpleEnoughForPrettyForm(StringRef symName) {
   if (symName.empty())
     return true;
 
-  // If we got to an unexpected character, then it must be a <>. Check that the
-  // rest of the symbol is wrapped within <>.
+  // If we got to an unexpected character, then it must be a <>. Check that
+  // the rest of the symbol is wrapped within <>.
   return symName.front() == '<' && symName.back() == '>';
 }
 
@@ -2233,7 +2240,8 @@ static void printDialectSymbol(raw_ostream &os, StringRef symPrefix,
   os << '<' << symString << '>';
 }
 
-/// Returns true if the given string can be represented as a bare identifier.
+/// Returns true if the given string can be represented as a bare
+/// identifier.
 static bool isBareIdentifier(StringRef name) {
   // By making this unsigned, the value passed in to isalnum will always be
   // in the range 0-255. This is important when building with MSVC because
@@ -2246,8 +2254,8 @@ static bool isBareIdentifier(StringRef name) {
   });
 }
 
-/// Print the given string as a keyword, or a quoted and escaped string if it
-/// has any special or non-printable characters in it.
+/// Print the given string as a keyword, or a quoted and escaped string if
+/// it has any special or non-printable characters in it.
 static void printKeywordOrString(StringRef keyword, raw_ostream &os) {
   // If it can be represented as a bare identifier, write it directly.
   if (isBareIdentifier(keyword)) {
@@ -2262,8 +2270,10 @@ static void printKeywordOrString(StringRef keyword, raw_ostream &os) {
 }
 
 /// Print the given string as a symbol reference. A symbol reference is
-/// represented as a string prefixed with '@'. The reference is surrounded with
-/// ""'s and escaped if it has any special or non-printable characters in it.
+/// represented as a string prefixed with '@'. The reference is surrounded
+/// with
+/// ""'s and escaped if it has any special or non-printable characters in
+/// it.
 static void printSymbolReference(StringRef symbolRef, raw_ostream &os) {
   if (symbolRef.empty()) {
     os << "@<<INVALID EMPTY SYMBOL>>";
@@ -2335,9 +2345,9 @@ void AsmPrinter::Impl::printAttributeImpl(Attribute attr,
       return;
     }
 
-    // Only print attributes as unsigned if they are explicitly unsigned or are
-    // signless 1-bit values.  Indexes, signed values, and multi-bit signless
-    // values print as signed.
+    // Only print attributes as unsigned if they are explicitly unsigned or
+    // are signless 1-bit values.  Indexes, signed values, and multi-bit
+    // signless values print as signed.
     bool isUnsigned =
         intType.isUnsignedInteger() || intType.isSignlessInteger(1);
     intAttr.getValue().print(os, !isUnsigned);
@@ -2418,7 +2428,8 @@ void AsmPrinter::Impl::printAttributeImpl(Attribute attr,
       if (indices.getNumElements() != 0) {
         printDenseIntOrFPElementsAttr(indices, /*allowHex=*/false);
         os << ", ";
-        printDenseElementsAttr(sparseEltAttr.getValues(), /*allowHex=*/true);
+        printDenseElementsAttr(sparseEltAttr.getValues(),
+                               /*allowHex=*/true);
       }
       os << '>';
     }
@@ -2476,9 +2487,9 @@ printDenseElementsAttrImpl(bool isSplat, ShapedType type, raw_ostream &os,
   if (numElements == 0)
     return;
 
-  // We use a mixed-radix counter to iterate through the shape. When we bump a
-  // non-least-significant digit, we emit a close bracket. When we next emit an
-  // element we re-open all closed brackets.
+  // We use a mixed-radix counter to iterate through the shape. When we bump
+  // a non-least-significant digit, we emit a close bracket. When we next
+  // emit an element we re-open all closed brackets.
 
   // The mixed-radix counter, with radices in 'shape'.
   int64_t rank = type.getRank();
@@ -2550,9 +2561,9 @@ void AsmPrinter::Impl::printDenseIntOrFPElementsAttr(
 
   if (ComplexType complexTy = llvm::dyn_cast<ComplexType>(elementType)) {
     Type complexElementType = complexTy.getElementType();
-    // Note: The if and else below had a common lambda function which invoked
-    // printDenseElementsAttrImpl. This lambda was hitting a bug in gcc 9.1,9.2
-    // and hence was replaced.
+    // Note: The if and else below had a common lambda function which
+    // invoked printDenseElementsAttrImpl. This lambda was hitting a bug in
+    // gcc 9.1,9.2 and hence was replaced.
     if (llvm::isa<IntegerType>(complexElementType)) {
       auto valueIt = attr.value_begin<std::complex<APInt>>();
       printDenseElementsAttrImpl(attr.isSplat(), type, os, [&](unsigned index) {
@@ -3130,7 +3141,8 @@ void AsmPrinter::Impl::printIntegerSet(IntegerSet set) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// This class contains the logic for printing operations, regions, and blocks.
+/// This class contains the logic for printing operations, regions, and
+/// blocks.
 class OperationPrinter : public AsmPrinter::Impl, private OpAsmPrinter {
 public:
   using Impl = AsmPrinter::Impl;
@@ -3142,14 +3154,14 @@ public:
   /// Print the given top-level operation.
   void printTopLevelOperation(Operation *op);
 
-  /// Print the given operation, including its left-hand side and its right-hand
-  /// side, with its indent and location.
+  /// Print the given operation, including its left-hand side and its
+  /// right-hand side, with its indent and location.
   void printFullOpWithIndentAndLoc(Operation *op);
-  /// Print the given operation, including its left-hand side and its right-hand
-  /// side, but not including indentation and location.
+  /// Print the given operation, including its left-hand side and its
+  /// right-hand side, but not including indentation and location.
   void printFullOp(Operation *op);
-  /// Print the right-hand size of the given operation in the custom or generic
-  /// form.
+  /// Print the right-hand size of the given operation in the custom or
+  /// generic form.
   void printCustomOrGenericOp(Operation *op) override;
   /// Print the right-hand side of the given operation in the generic form.
   void printGenericOp(Operation *op, bool printOpName) override;
@@ -3157,9 +3169,9 @@ public:
   /// Print the name of the given block.
   void printBlockName(Block *block);
 
-  /// Print the given block. If 'printBlockArgs' is false, the arguments of the
-  /// block are not printed. If 'printBlockTerminator' is false, the terminator
-  /// operation of the block is not printed.
+  /// Print the given block. If 'printBlockArgs' is false, the arguments of
+  /// the block are not printed. If 'printBlockTerminator' is false, the
+  /// terminator operation of the block is not printed.
   void print(Block *block, bool printBlockArgs = true,
              bool printBlockTerminator = true);
 
@@ -3175,8 +3187,8 @@ public:
   // OpAsmPrinter methods
   //===--------------------------------------------------------------------===//
 
-  /// Print a loc(...) specifier if printing debug info is enabled. Locations
-  /// may be deferred with an alias.
+  /// Print a loc(...) specifier if printing debug info is enabled.
+  /// Locations may be deferred with an alias.
   void printOptionalLocationSpecifier(Location loc) override {
     printTrailingLocation(loc);
   }
@@ -3209,7 +3221,8 @@ public:
     printValueID(value, /*printResultNo=*/true, &os);
   }
 
-  /// Print an optional attribute dictionary with a given set of elided values.
+  /// Print an optional attribute dictionary with a given set of elided
+  /// values.
   void printOptionalAttrDict(ArrayRef<NamedAttribute> attrs,
                              ArrayRef<StringRef> elidedAttrs = {}) override {
     Impl::printOptionalAttrDict(attrs, elidedAttrs);
@@ -3233,25 +3246,26 @@ public:
   void printRegion(Region &region, bool printEntryBlockArgs,
                    bool printBlockTerminators, bool printEmptyBlock) override;
 
-  /// Renumber the arguments for the specified region to the same names as the
-  /// SSA values in namesToUse. This may only be used for IsolatedFromAbove
-  /// operations. If any entry in namesToUse is null, the corresponding
-  /// argument name is left alone.
+  /// Renumber the arguments for the specified region to the same names as
+  /// the SSA values in namesToUse. This may only be used for
+  /// IsolatedFromAbove operations. If any entry in namesToUse is null, the
+  /// corresponding argument name is left alone.
   void shadowRegionArgs(Region &region, ValueRange namesToUse) override {
     state.getSSANameState().shadowRegionArgs(region, namesToUse);
   }
 
-  /// Print the given affine map with the symbol and dimension operands printed
-  /// inline with the map.
+  /// Print the given affine map with the symbol and dimension operands
+  /// printed inline with the map.
   void printAffineMapOfSSAIds(AffineMapAttr mapAttr,
                               ValueRange operands) override;
 
-  /// Print the given affine expression with the symbol and dimension operands
-  /// printed inline with the expression.
+  /// Print the given affine expression with the symbol and dimension
+  /// operands printed inline with the expression.
   void printAffineExprOfSSAIds(AffineExpr expr, ValueRange dimOperands,
                                ValueRange symOperands) override;
 
-  /// Print users of this operation or id of this operation if it has no result.
+  /// Print users of this operation or id of this operation if it has no
+  /// result.
   void printUsersComment(Operation *op);
 
   /// Print users of this block arg.
@@ -3260,8 +3274,8 @@ public:
   /// Print the users of a value.
   void printValueUsers(Value value);
 
-  /// Print either the ids of the result values or the id of the operation if
-  /// the operation has no results.
+  /// Print either the ids of the result values or the id of the operation
+  /// if the operation has no results.
   void printUserIDs(Operation *user, bool prefixComma = false);
 
 private:
@@ -3290,7 +3304,8 @@ private:
     void buildBlob(StringRef key, ArrayRef<char> data,
                    uint32_t dataAlignment) final {
       printFn(key, [&](raw_ostream &os) {
-        // Store the blob in a hex string containing the alignment and the data.
+        // Store the blob in a hex string containing the alignment and the
+        // data.
         llvm::support::ulittle32_t dataAlignmentLE(dataAlignment);
         os << "\"0x"
            << llvm::toHex(StringRef(reinterpret_cast<char *>(&dataAlignmentLE),
@@ -3307,17 +3322,17 @@ private:
   void printFileMetadataDictionary(Operation *op);
 
   /// Print the resource sections for the file metadata dictionary.
-  /// `checkAddMetadataDict` is used to indicate that metadata is going to be
-  /// added, and the file metadata dictionary should be started if it hasn't
-  /// yet.
+  /// `checkAddMetadataDict` is used to indicate that metadata is going to
+  /// be added, and the file metadata dictionary should be started if it
+  /// hasn't yet.
   void printResourceFileMetadata(function_ref<void()> checkAddMetadataDict,
                                  Operation *op);
 
   // Contains the stack of default dialects to use when printing regions.
-  // A new dialect is pushed to the stack before parsing regions nested under an
-  // operation implementing `OpAsmOpInterface`, and popped when done. At the
-  // top-level we start with "builtin" as the default, so that the top-level
-  // `module` operation prints as-is.
+  // A new dialect is pushed to the stack before parsing regions nested
+  // under an operation implementing `OpAsmOpInterface`, and popped when
+  // done. At the top-level we start with "builtin" as the default, so that
+  // the top-level `module` operation prints as-is.
   SmallVector<StringRef> defaultDialectStack{"builtin"};
 
   /// The number of spaces used for indenting nested operations.
@@ -3429,8 +3444,8 @@ void OperationPrinter::printResourceFileMetadata(
   if (hadResource)
     os << newLine << "  }";
 
-  // Print the `external_resources` section if we have any external clients with
-  // resources.
+  // Print the `external_resources` section if we have any external clients
+  // with resources.
   needEntryComma = false;
   needResourceComma = hadResource;
   hadResource = false;
@@ -3480,8 +3495,8 @@ void OperationPrinter::printFullOp(Operation *op) {
     // Check to see if this operation has multiple result groups.
     ArrayRef<int> resultGroups = state.getSSANameState().getOpResultGroups(op);
     if (!resultGroups.empty()) {
-      // Interleave the groups excluding the last one, this one will be handled
-      // separately.
+      // Interleave the groups excluding the last one, this one will be
+      // handled separately.
       interleaveComma(llvm::seq<int>(0, resultGroups.size() - 1), [&](int i) {
         printResultGroup(resultGroups[i],
                          resultGroups[i + 1] - resultGroups[i]);
@@ -3507,8 +3522,8 @@ void OperationPrinter::printUsersComment(Operation *op) {
   } else if (numResults && op->use_empty()) {
     os << " // unused";
   } else if (numResults && !op->use_empty()) {
-    // Print "user" if the operation has one result used to compute one other
-    // result, or is used in one operation with no result.
+    // Print "user" if the operation has one result used to compute one
+    // other result, or is used in one operation with no result.
     unsigned usedInNResults = 0;
     unsigned usedInNOperations = 0;
     SmallPtrSet<Operation *, 1> userSet;
@@ -3670,7 +3685,8 @@ void OperationPrinter::print(Block *block, bool printBlockArgs,
     }
     os << ':';
 
-    // Print out some context information about the predecessors of this block.
+    // Print out some context information about the predecessors of this
+    // block.
     if (!block->getParent()) {
       os << "  // block is not in a region!";
     } else if (block->hasNoPredecessors()) {
@@ -3766,9 +3782,9 @@ void OperationPrinter::printRegion(Region &region, bool printEntryBlockArgs,
       defaultDialectStack.push_back("");
 
     auto *entryBlock = &region.front();
-    // Force printing the block header if printEmptyBlock is set and the block
-    // is empty or if printEntryBlockArgs is set and there are arguments to
-    // print.
+    // Force printing the block header if printEmptyBlock is set and the
+    // block is empty or if printEntryBlockArgs is set and there are
+    // arguments to print.
     bool shouldAlwaysPrintBlockHeader =
         (printEmptyBlock && entryBlock->empty()) ||
         (printEntryBlockArgs && entryBlock->getNumArguments() != 0);
@@ -3796,7 +3812,6 @@ void OperationPrinter::printAffineMapOfSSAIds(AffineMapAttr mapAttr,
     if (isSymbol)
       os << ')';
   };
-
   interleaveComma(map.getResults(), [&](AffineExpr expr) {
     printAffineExpr(expr, printValueName);
   });
@@ -3966,8 +3981,8 @@ void Value::printAsOperand(raw_ostream &os, AsmState &state) const {
   // Currently, region arguments can be shadowed when printing the main
   // operation. If the IR hasn't been printed, this will produce the old SSA
   // name and not the shadowed name.
-  state.getImpl().getSSANameState().printValueID(*this, /*printResultNo=*/true,
-                                                 os);
+  state.getImpl().getSSANameState().printValueID(*this,
+                                                 /*printResultNo=*/true, os);
 }
 
 static Operation *findParent(Operation *op, bool shouldUseLocalScope) {
@@ -4093,7 +4108,8 @@ ParseResult parseDimensionList(OpAsmParser &parser,
   }
   if (shapeArr.empty()) {
     return parser.emitError(parser.getCurrentLocation())
-           << "Failed parsing dimension list. Did you mean an empty list? It "
+           << "Failed parsing dimension list. Did you mean an empty list? "
+              "It "
               "must be denoted by \"[]\".";
   }
   dimensions = DenseI64ArrayAttr::get(parser.getContext(), shapeArr);
